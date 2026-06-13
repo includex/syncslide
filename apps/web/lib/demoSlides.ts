@@ -26,3 +26,17 @@ const DEMO_SCRIPTS = [
 export function slideScript(page: number): string {
   return DEMO_SCRIPTS[page - 1] ?? '';
 }
+
+/**
+ * Q&A 화면 데모용 질문 (PDF/오디오처럼 플레이스홀더).
+ * 실제 질문은 `question_added` 소켓 이벤트로 도착한다 (Dev B의 question_submit 중계 연동 시).
+ */
+export const DEMO_QUESTIONS: {
+  id: string;
+  nickname: string | null;
+  content: string;
+}[] = [
+  { id: 'q-demo-1', nickname: '익명1', content: '실시간 동기화 지연은 보통 어느 정도인가요?' },
+  { id: 'q-demo-2', nickname: '익명2', content: '리플레이는 영상 인코딩 없이 어떻게 재생되나요?' },
+  { id: 'q-demo-3', nickname: null, content: 'PDF 말고 PPT 파일도 업로드할 수 있나요?' },
+];

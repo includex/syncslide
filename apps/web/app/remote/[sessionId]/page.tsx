@@ -12,7 +12,12 @@
 import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { createSocket, type AppSocket } from '@/lib/socket';
 import { SOCKET_EVENTS } from '@syncslide/shared';
-import { TOTAL_PAGES, slideColor, slideScript } from '@/lib/demoSlides';
+import {
+  TOTAL_PAGES,
+  slideColor,
+  slideScript,
+  DEMO_QUESTIONS,
+} from '@/lib/demoSlides';
 import { useRemoteStore, type RemoteMode } from '@/lib/remoteStore';
 import { useWakeLock } from '@/lib/useWakeLock';
 import { useCanvasDraw, PEN_COLOR, PEN_WIDTH } from '@/lib/useCanvasDraw';
@@ -70,12 +75,19 @@ const C = {
   accent: '#7270ff',
   paper: '#ffffff',
   fog: '#d9dbda',
+  mist: '#e5e7eb',
 };
 
 interface LaserDot {
   x: number;
   y: number;
   key: number;
+}
+
+interface QaItem {
+  id: string;
+  nickname: string | null;
+  content: string;
 }
 
 export default function RemotePage({
@@ -130,6 +142,10 @@ export default function RemotePage({
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [endConfirm, setEndConfirm] = useState(false);
 
+  // Q&A — 질문 목록(오래된 순, 새 질문은 하단 추가) + 강조 중 질문(한 번에 하나)
+  const [questions, setQuestions] = useState<QaItem[]>(DEMO_QUESTIONS);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+
   const page = currentPage > 0 ? currentPage : 1;
   const modeRef = useRef<RemoteMode>(mode);
   modeRef.current = mode;
@@ -159,6 +175,14 @@ export default function RemotePage({
     });
     socket.on(SOCKET_EVENTS.PRESENTER_ACTIVATE, () => setStatus('ACTIVE'));
     socket.on(SOCKET_EVENTS.SLIDE_CHANGE, (payload) => setPage(payload.page));
+    // 청중 질문 도착 (Dev B의 question_submit 중계 연동 시) — 오래된 순 하단 추가
+    socket.on(SOCKET_EVENTS.QUESTION_ADDED, (q) =>
+      setQuestions((prev) =>
+        prev.some((x) => x.id === q.id)
+          ? prev
+          : [...prev, { id: q.id, nickname: q.nickname ?? null, content: q.content }]
+      )
+    );
 
     return () => {
       socket.disconnect();
@@ -283,6 +307,16 @@ export default function RemotePage({
     socketRef.current?.emit(SOCKET_EVENTS.PRESENTATION_END, { sessionId });
     setEndConfirm(false);
     setMode('slide');
+  }
+
+  // Q&A 질문 강조 토글 (한 번에 하나만 활성, 다시 탭하면 해제 → 팝업 해제)
+  function toggleHighlight(id: string) {
+    const next = highlightedId === id ? null : id;
+    setHighlightedId(next);
+    socketRef.current?.emit(SOCKET_EVENTS.QA_HIGHLIGHT, {
+      questionId: id,
+      isVisible: next !== null,
+    });
   }
 
   // ── 포인터 제스처 ───────────────────────────────────────
@@ -451,21 +485,31 @@ export default function RemotePage({
     >
       {/* ── 슬라이드 / 콘텐츠 영역 (세로 모드: 16:9 중앙 정렬, 여백 Dark Base) ── */}
       <section className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden">
-        {/* 연결 상태 배지 (좌상단) */}
-        <div className="absolute left-3 top-3 z-20">
-          <span
-            className="rounded-full px-3 py-1 text-xs font-semibold"
-            style={
-              connected
-                ? { backgroundColor: C.accent, color: C.paper }
-                : { backgroundColor: C.surface, color: C.textSecondary }
-            }
-          >
-            {connected ? '연결됨' : '연결 끊김'}
-          </span>
-        </div>
+        {/* 연결 상태 배지 (좌상단) — Q&A 화면은 자체 상단바 사용 */}
+        {mode !== 'qa' && (
+          <div className="absolute left-3 top-3 z-20">
+            <span
+              className="rounded-full px-3 py-1 text-xs font-semibold"
+              style={
+                connected
+                  ? { backgroundColor: C.accent, color: C.paper }
+                  : { backgroundColor: C.surface, color: C.textSecondary }
+              }
+            >
+              {connected ? '연결됨' : '연결 끊김'}
+            </span>
+          </div>
+        )}
 
-        {/* 제스처 영역: 하단 버튼을 제외한 슬라이드 영역 전체 (세로 모드 레터박스 여백 포함) */}
+        {mode === 'qa' ? (
+          <QaScreen
+            questions={questions}
+            highlightedId={highlightedId}
+            onBack={() => setMode('slide')}
+            onToggle={toggleHighlight}
+          />
+        ) : (
+        /* 제스처 영역: 하단 버튼을 제외한 슬라이드 영역 전체 (세로 모드 레터박스 여백 포함) */
         <div
           className="absolute inset-0 flex touch-none select-none items-center justify-center"
           onPointerDown={onPointerDown}
@@ -552,23 +596,8 @@ export default function RemotePage({
               </div>
             )}
           </div>
-
-          {/* Q&A 화면 (Radial Menu로 진입) — 길게 눌러 메뉴로 복귀 */}
-          {mode === 'qa' && (
-            <div
-              className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 p-8 text-center"
-              style={{ backgroundColor: C.base }}
-            >
-              <h2 className="text-2xl font-bold" style={{ color: C.textPrimary }}>
-                Q&amp;A
-              </h2>
-              <p style={{ color: C.textSecondary }}>아직 들어온 질문이 없습니다</p>
-              <p className="text-xs" style={{ color: C.textSecondary }}>
-                길게 눌러 메뉴에서 슬라이드로 돌아갈 수 있어요
-              </p>
-            </div>
-          )}
         </div>
+        )}
       </section>
 
       {/* ── 우측 버튼 패널 (판서 모드에서는 숨김) ── */}
@@ -747,6 +776,108 @@ function RadialMenu({
         );
       })}
     </div>
+  );
+}
+
+/**
+ * Q&A 화면 (REMOTE_MOBILE_UX.md §Q&A)
+ * 상단바(돌아가기/타이틀/총 질문 수) + 질문 카드 리스트(오래된 순).
+ * 카드 탭 → 강조(qa_highlight) 토글, 한 번에 하나만 활성.
+ */
+function QaScreen({
+  questions,
+  highlightedId,
+  onBack,
+  onToggle,
+}: {
+  questions: QaItem[];
+  highlightedId: string | null;
+  onBack: () => void;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <div
+      className="absolute inset-0 z-10 flex flex-col"
+      style={{ backgroundColor: C.base }}
+    >
+      {/* 상단 바 */}
+      <div
+        className="flex shrink-0 items-center justify-between px-4 py-3"
+        style={{ borderBottom: `1px solid ${C.border}` }}
+      >
+        <button
+          onClick={onBack}
+          className="text-sm font-medium"
+          style={{ color: C.textPrimary }}
+          aria-label="슬라이드로 돌아가기"
+        >
+          ← 돌아가기
+        </button>
+        <span className="text-base font-bold" style={{ color: C.textPrimary }}>
+          Q&amp;A
+        </span>
+        <span className="text-sm" style={{ color: C.textSecondary }}>
+          {questions.length}개
+        </span>
+      </div>
+
+      {/* 본문: 질문 카드 리스트 (오래된 순, 새 질문은 하단) */}
+      {/* TODO(후속): AI 중복 질문 병합 및 인기순 정렬 */}
+      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+        {questions.length === 0 ? (
+          <p
+            className="mt-8 text-center text-sm"
+            style={{ color: C.textSecondary }}
+          >
+            아직 들어온 질문이 없습니다
+          </p>
+        ) : (
+          questions.map((q) => (
+            <QuestionCard
+              key={q.id}
+              q={q}
+              active={highlightedId === q.id}
+              onClick={() => onToggle(q.id)}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Q&A 질문 카드 — 비활성: 다크서피스+Mist 보더 / 활성: violet 전체 + 확성기 */
+function QuestionCard({
+  q,
+  active,
+  onClick,
+}: {
+  q: QaItem;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="relative block w-full text-left"
+      style={{
+        backgroundColor: active ? C.accent : C.surface,
+        border: active ? 'none' : `1px solid ${C.mist}`,
+        borderRadius: 8,
+        padding: 16,
+      }}
+    >
+      <p style={{ fontSize: 16, fontWeight: 400, color: C.paper }}>{q.content}</p>
+      {active && (
+        <span
+          className="absolute right-3 top-3 text-lg"
+          style={{ color: C.paper }}
+          aria-label="강조 중"
+        >
+          📢
+        </span>
+      )}
+    </button>
   );
 }
 
