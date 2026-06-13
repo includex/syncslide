@@ -25,6 +25,7 @@ model Presentation {
   owner     User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   pdfUrl    String
   images    String[]
+  scripts   String[] // 페이지별 발표 스크립트(자막). images와 평행. 리모컨 전용 (PRD §11.4)
   status    PresentationStatus @default(PROCESSING)
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
