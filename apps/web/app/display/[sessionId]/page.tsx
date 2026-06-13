@@ -9,6 +9,7 @@ import { createSocket, type AppSocket } from '@/lib/socket';
 import { api, type Question, type SessionDetail } from '@/lib/api';
 import { DrawingCanvas } from '@/components/DrawingCanvas';
 import { SOCKET_EVENTS, type DrawEvent } from '@syncslide/shared';
+import { slideColor } from '@/lib/demoSlides';
 
 export default function DisplayPage({
   params,
@@ -170,7 +171,7 @@ export default function DisplayPage({
         ) : (
           <div
             className="absolute inset-0 flex items-center justify-center text-9xl font-bold text-paper"
-            style={{ backgroundColor: `hsl(${page * 60}, 40%, 15%)` }}
+            style={{ backgroundColor: slideColor(page) }}
           >
             {page}
           </div>
