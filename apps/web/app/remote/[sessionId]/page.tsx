@@ -17,7 +17,6 @@ import { useRemoteStore, type RemoteMode } from '@/lib/remoteStore';
 import { useWakeLock } from '@/lib/useWakeLock';
 import { useCanvasDraw, PEN_COLOR, PEN_WIDTH } from '@/lib/useCanvasDraw';
 
-const DIM = 'rgba(0, 0, 0, 0.35)';
 const SWIPE_THRESHOLD = 50;
 const TAP_MOVE_MAX = 10;
 const DOUBLE_TAP_MS = 300;
@@ -128,7 +127,17 @@ export default function RemotePage({
   // 모드 변경 시 줌 리셋 + 판서 진입 토스트
   useEffect(() => {
     if (mode !== 'draw') setTransform({ scale: 1, tx: 0, ty: 0 });
-    if (mode === 'draw') showToast('판서 모드 · 더블탭으로 종료');
+    if (mode === 'draw') {
+      const portrait =
+        typeof window !== 'undefined' &&
+        window.matchMedia('(orientation: portrait)').matches;
+      // 판서는 가로 단일 레이아웃 → 세로면 가로 전환 안내
+      showToast(
+        portrait
+          ? '가로로 돌려서 판서하세요 · 더블탭으로 종료'
+          : '판서 모드 · 더블탭으로 종료'
+      );
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
@@ -290,16 +299,14 @@ export default function RemotePage({
       return;
     }
 
-    if (m === 'slide' && pointers.current.size === 0) {
+    // 슬라이드/스크립트 모드: 탭·스와이프로 페이지 이동 (스크립트는 이전/다음 장 스크립트 표시)
+    if ((m === 'slide' || m === 'script') && pointers.current.size === 0) {
       const dx = e.clientX - g.startX;
       if (g.moved < TAP_MOVE_MAX) {
         // 탭: 좌측=이전, 우측=다음
-        const el = slideRef.current;
-        if (el) {
-          const r = el.getBoundingClientRect();
-          const mid = r.left + r.width / 2;
-          goTo(e.clientX < mid ? page - 1 : page + 1);
-        }
+        const r = e.currentTarget.getBoundingClientRect();
+        const mid = r.left + r.width / 2;
+        goTo(e.clientX < mid ? page - 1 : page + 1);
       } else if (Math.abs(dx) >= SWIPE_THRESHOLD) {
         goTo(page + (dx < 0 ? 1 : -1)); // 왼쪽 스와이프 → 다음
       }
@@ -307,15 +314,19 @@ export default function RemotePage({
   }
 
   const showPanel = mode !== 'draw';
-  const dimVisible = mode === 'slide';
+  // 판서 모드는 방향과 무관하게 가로(전체 채움) 단일 레이아웃. 그 외는 방향 반응형(세로 16:9).
+  const slideBoxClass =
+    mode === 'draw'
+      ? 'absolute inset-0 flex items-center justify-center overflow-hidden'
+      : 'relative flex items-center justify-center overflow-hidden landscape:absolute landscape:inset-0 portrait:aspect-video portrait:w-full';
 
   return (
     <main
-      className="flex h-screen w-screen overflow-hidden landscape:flex-row portrait:flex-col"
+      className="flex h-dvh w-screen overflow-hidden landscape:flex-row portrait:flex-col"
       style={{ backgroundColor: C.base, color: C.textPrimary }}
     >
       {/* ── 슬라이드 / 콘텐츠 영역 (세로 모드: 16:9 중앙 정렬, 여백 Dark Base) ── */}
-      <section className="relative flex flex-1 items-center justify-center overflow-hidden">
+      <section className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden">
         {/* 연결 상태 배지 (좌상단) */}
         <div className="absolute left-3 top-3 z-20">
           <span
@@ -330,54 +341,39 @@ export default function RemotePage({
           </span>
         </div>
 
-        {mode === 'script' ? (
-          // ── 스크립트 모드 ──
-          <div className="flex h-full w-full flex-col p-8">
-            <span className="text-xs" style={{ color: C.textSecondary }}>
-              {page} / {totalPages}
-            </span>
-            <div className="flex flex-1 items-center justify-center">
+        {/* 제스처 영역: 하단 버튼을 제외한 슬라이드 영역 전체 (세로 모드 레터박스 여백 포함) */}
+        <div
+          className="absolute inset-0 flex touch-none select-none items-center justify-center"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+        >
+          {/* 슬라이드 박스 (시각·좌표 기준, 세로 모드: 16:9 중앙 정렬) */}
+          <div
+            ref={slideRef}
+            className={slideBoxClass}
+            style={{
+              backgroundColor: mode === 'script' ? C.base : slideColor(page),
+              transform: `translate(${transform.tx}px, ${transform.ty}px) scale(${transform.scale})`,
+              transformOrigin: 'center center',
+            }}
+          >
+            {mode === 'script' ? (
               <p
-                className="max-w-3xl text-center leading-relaxed"
+                className="max-w-3xl px-8 text-center leading-relaxed"
                 style={{ fontSize: 26, fontWeight: 500, color: C.textPrimary }}
               >
                 {slideScript(page) || '스크립트 없음'}
               </p>
-            </div>
-          </div>
-        ) : (
-          // ── 슬라이드 / 레이저 / 판서 모드 ──
-          <div
-            className="touch-none select-none landscape:absolute landscape:inset-0 portrait:relative portrait:aspect-video portrait:w-full"
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={onPointerUp}
-          >
-            <div
-              ref={slideRef}
-              className="absolute inset-0 flex items-center justify-center text-7xl font-bold"
-              style={{
-                backgroundColor: slideColor(page),
-                transform: `translate(${transform.tx}px, ${transform.ty}px) scale(${transform.scale})`,
-                transformOrigin: 'center center',
-              }}
-            >
-              {page}
-              {/* 판서 캔버스 오버레이 */}
-              <canvas
-                ref={canvasRef}
-                className="pointer-events-none absolute inset-0 h-full w-full"
-              />
-            </div>
-
-            {/* dim 오버레이 (슬라이드 모드 넘기기 어포던스) */}
-            {dimVisible && (
-              <div
-                className="pointer-events-none absolute inset-0"
-                style={{ backgroundColor: DIM }}
-              />
+            ) : (
+              <span className="text-7xl font-bold">{page}</span>
             )}
+            {/* 판서 캔버스 오버레이 */}
+            <canvas
+              ref={canvasRef}
+              className="pointer-events-none absolute inset-0 h-full w-full"
+            />
 
             {/* 레이저 점 */}
             {mode === 'laser' && laser && (
@@ -394,7 +390,7 @@ export default function RemotePage({
               />
             )}
 
-            {/* 페이지 번호 (하단 중앙) */}
+            {/* 페이지 번호 (슬라이드 영역 하단 중앙 — 모든 모드 동일) */}
             <div
               className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 text-xs"
               style={{ color: C.textSecondary }}
@@ -409,6 +405,7 @@ export default function RemotePage({
                   draw.clear();
                   emitDraw('clear');
                 }}
+                onPointerDown={(e) => e.stopPropagation()}
                 className="absolute bottom-4 right-4 z-20 flex h-14 w-14 items-center justify-center rounded-full text-xl"
                 style={{
                   backgroundColor: C.surface,
@@ -431,13 +428,13 @@ export default function RemotePage({
               </div>
             )}
           </div>
-        )}
+        </div>
       </section>
 
       {/* ── 우측 버튼 패널 (판서 모드에서는 숨김) ── */}
       {showPanel && (
         <nav
-          className="flex landscape:w-1/5 landscape:min-w-[88px] landscape:flex-col portrait:h-24 portrait:w-full portrait:flex-row"
+          className="flex shrink-0 landscape:h-full landscape:w-1/5 landscape:min-w-[88px] landscape:flex-col portrait:h-24 portrait:w-full portrait:flex-row"
           style={{ backgroundColor: C.surface }}
         >
           <ModeButton
