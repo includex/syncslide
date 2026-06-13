@@ -24,23 +24,40 @@ const LASER_FADE_MS = 1200;
 const MIN_SCALE = 1;
 const MAX_SCALE = 3;
 const LONG_PRESS_MS = 450;
-const RADIAL_RADIUS = 150; // 도넛 외곽 반지름 (기존 96 → 1.5배+)
-const RADIAL_INNER_RATIO = 0.4; // 내부 빈 원 = 전체의 40%
-const RADIAL_INNER = RADIAL_RADIUS * RADIAL_INNER_RATIO;
-const RADIAL_DEADZONE = RADIAL_INNER; // 가운데 빈 영역(투명)에서 떼면 선택 취소
+const RADIAL_DIST = 112; // 롱프레스 지점 → 버튼 중심 거리 (엄지로 누르기 편하게)
+const RADIAL_BUTTON = 64; // 버튼 지름(px)
+const RADIAL_HIT = 46; // 선택 히트 반경
 
-/** Radial Menu 섹션 (가로 기준: 12시=슬라이드, 4시=Q&A, 8시=발표 끝내기) */
+/** Radial Menu 섹션 (롱프레스 지점 기준 위쪽으로: 12시=슬라이드, 2시=Q&A, 10시=발표 끝내기) */
 type RadialSection = 'slide' | 'qa' | 'end';
 const PEN_RED = '#FF6B6B';
 
-/** 중심 기준 (dx,dy)를 섹션으로 분류. 데드존 내부면 null. */
+/** 버튼 3개 배치 (각도: 0=오른쪽, 시계방향 / 화면 좌표) */
+const RADIAL_BUTTONS: { key: RadialSection; label: string; angle: number }[] = [
+  { key: 'slide', label: '슬라이드', angle: 270 }, // 12시 (위)
+  { key: 'qa', label: 'Q&A', angle: 330 }, // 2시 (우상단)
+  { key: 'end', label: '발표 끝내기', angle: 210 }, // 10시 (좌상단)
+];
+
+/** 롱프레스 중심 기준 버튼 오프셋(px) */
+function radialOffset(angle: number) {
+  const r = (angle * Math.PI) / 180;
+  return { x: RADIAL_DIST * Math.cos(r), y: RADIAL_DIST * Math.sin(r) };
+}
+
+/** 손가락 위치(중심 기준 dx,dy)에서 가장 가까운 버튼 선택. 히트 밖이면 null. */
 function pickSection(dx: number, dy: number): RadialSection | null {
-  if (Math.hypot(dx, dy) < RADIAL_DEADZONE) return null;
-  let deg = (Math.atan2(dy, dx) * 180) / Math.PI; // 0=오른쪽, y아래 → 시계방향 +
-  if (deg < 0) deg += 360;
-  if (deg >= 330 || deg < 90) return 'qa'; // 중심 30° (4시)
-  if (deg < 210) return 'end'; // 중심 150° (8시)
-  return 'slide'; // 210~330°, 중심 270° (12시)
+  let best: RadialSection | null = null;
+  let bestD = RADIAL_HIT;
+  for (const b of RADIAL_BUTTONS) {
+    const o = radialOffset(b.angle);
+    const d = Math.hypot(dx - o.x, dy - o.y);
+    if (d < bestD) {
+      bestD = d;
+      best = b.key;
+    }
+  }
+  return best;
 }
 
 // DESIGN.md §7 다크 토큰
@@ -635,21 +652,21 @@ export default function RemotePage({
         }
         @keyframes radialIn {
           0% {
-            transform: translate(-50%, -50%) scale(0.7);
+            transform: scale(0.7);
             opacity: 0;
           }
           100% {
-            transform: translate(-50%, -50%) scale(1);
-            opacity: 0.92;
+            transform: scale(1);
+            opacity: 1;
           }
         }
         @keyframes radialOut {
           0% {
-            transform: translate(-50%, -50%) scale(1);
-            opacity: 0.92;
+            transform: scale(1);
+            opacity: 1;
           }
           100% {
-            transform: translate(-50%, -50%) scale(0.7);
+            transform: scale(0.7);
             opacity: 0;
           }
         }
@@ -684,8 +701,9 @@ function ModeButton({
 }
 
 /**
- * Radial Menu (REMOTE_MOBILE_UX.md §Radial Menu)
- * 롱프레스 지점 중심으로 120°씩 3등분: 12시 슬라이드 / 4시 Q&A / 8시 발표 끝내기.
+ * Radial Menu (REMOTE_MOBILE_UX.md §4-1)
+ * 롱프레스 지점 기준 위쪽으로 펼쳐지는 독립 원형 버튼 3개:
+ * 12시 슬라이드 / 2시 Q&A / 10시 발표 끝내기.
  */
 function RadialMenu({
   cx,
@@ -698,78 +716,38 @@ function RadialMenu({
   sel: RadialSection | null;
   closing: boolean;
 }) {
-  const R = RADIAL_RADIUS;
-  const sections: { key: RadialSection; label: string; center: number }[] = [
-    { key: 'slide', label: '슬라이드', center: 270 }, // 12시
-    { key: 'qa', label: 'Q&A', center: 30 }, // 4시
-    { key: 'end', label: '발표 끝내기', center: 150 }, // 8시
-  ];
   return (
     <div
       className="pointer-events-none fixed z-50"
       style={{
         left: cx,
         top: cy,
-        width: 2 * R,
-        height: 2 * R,
-        transform: 'translate(-50%, -50%)',
-        opacity: 0.92,
         animation: `${closing ? 'radialOut' : 'radialIn'} 150ms forwards`,
       }}
     >
-      <svg width={2 * R} height={2 * R} viewBox={`0 0 ${2 * R} ${2 * R}`}>
-        {sections.map((s) => (
-          <path
-            key={s.key}
-            d={ringSectorPath(s.center - 60, s.center + 60, R, RADIAL_INNER, R)}
-            fill={sel === s.key ? C.accent : C.border}
-            stroke={C.surface}
-            strokeWidth={2}
-          />
-        ))}
-      </svg>
-      {sections.map((s) => {
-        const rad = (s.center * Math.PI) / 180;
-        const midR = (RADIAL_INNER + R) / 2; // 도넛 띠 중앙
+      {RADIAL_BUTTONS.map((b) => {
+        const o = radialOffset(b.angle);
+        const active = sel === b.key;
         return (
-          <span
-            key={s.key}
-            className="absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap text-sm font-medium"
+          <div
+            key={b.key}
+            className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full px-1 text-center text-sm font-medium leading-tight"
             style={{
-              left: R + midR * Math.cos(rad),
-              top: R + midR * Math.sin(rad),
-              color: s.key === 'end' ? PEN_RED : C.paper,
+              left: o.x,
+              top: o.y,
+              width: RADIAL_BUTTON,
+              height: RADIAL_BUTTON,
+              backgroundColor: active ? C.accent : C.surface,
+              color: b.key === 'end' ? PEN_RED : C.paper,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
             }}
           >
-            {s.label}
-          </span>
+            {b.label}
+          </div>
         );
       })}
     </div>
   );
-}
-
-/**
- * 도넛(ring) 부채꼴 path: 중심(cx,cx) 기준 outerR~innerR 사이 띠를 startDeg~endDeg로.
- * 가운데(innerR 안쪽)는 비워 투명하게 둔다. (각도: 0=오른쪽, 시계방향)
- */
-function ringSectorPath(
-  startDeg: number,
-  endDeg: number,
-  outerR: number,
-  innerR: number,
-  cx: number
-) {
-  const pt = (deg: number, rad: number) => {
-    const a = (deg * Math.PI) / 180;
-    return [cx + rad * Math.cos(a), cx + rad * Math.sin(a)];
-  };
-  const [ox1, oy1] = pt(startDeg, outerR);
-  const [ox2, oy2] = pt(endDeg, outerR);
-  const [ix2, iy2] = pt(endDeg, innerR);
-  const [ix1, iy1] = pt(startDeg, innerR);
-  // 외곽호(시계방향) → 안쪽 끝으로 → 내부호(반시계) → 닫기
-  return `M ${ox1} ${oy1} A ${outerR} ${outerR} 0 0 1 ${ox2} ${oy2} L ${ix2} ${iy2} A ${innerR} ${innerR} 0 0 0 ${ix1} ${iy1} Z`;
 }
 
 // ── 기하 헬퍼 ──
