@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { supabase } from '../lib/supabase.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
@@ -34,7 +35,10 @@ router.post('/sessions/:id/recording', requireAuth, upload.single('audio'), asyn
   }
 
   const body = req.body as { timeline?: string };
-  const timeline = body.timeline ? (JSON.parse(body.timeline) as unknown[]) : [];
+  // 타임라인 JSON (TimelineEvent[]) — Prisma Json 필드용 캐스팅 (머지 빌드 수정)
+  const timeline = (
+    body.timeline ? JSON.parse(body.timeline) : []
+  ) as Prisma.InputJsonValue;
 
   const recording = await prisma.recording.upsert({
     where: { sessionId: req.params.id },
