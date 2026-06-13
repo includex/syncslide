@@ -66,6 +66,8 @@ export default function DisplayPage({
     });
 
     socket.on(SOCKET_EVENTS.PRESENTER_ACTIVATE, () => setStatus('ACTIVE'));
+    // 발표자가 QR 띄우기 화면으로 → QR 대기화면 복귀
+    socket.on(SOCKET_EVENTS.PRESENTER_STANDBY, () => setStatus('READY'));
 
     socket.on(SOCKET_EVENTS.SLIDE_CHANGE, (payload) => {
       setPage(payload.page);

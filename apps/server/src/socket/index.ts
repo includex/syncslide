@@ -18,6 +18,7 @@ import {
 } from '@syncslide/shared';
 import {
   activateSession,
+  standbySession,
   finishSession,
   getCurrentPageDrawings,
   getOrCreateSession,
@@ -82,6 +83,16 @@ export function registerSocketHandlers(io: IOServer): void {
         io.to(payload.sessionId).emit(SOCKET_EVENTS.SLIDE_CHANGE, {
           page: state.currentPage,
         });
+      }
+    );
+
+    // 발표자가 QR 띄우기(대기) 화면으로 → 세션 READY 복귀, 디스플레이/청중 QR 대기화면 표시
+    socket.on(
+      SOCKET_EVENTS.PRESENTER_STANDBY,
+      (payload: PresenterActivatePayload) => {
+        if (role !== 'presenter') return;
+        standbySession(payload.sessionId);
+        io.to(payload.sessionId).emit(SOCKET_EVENTS.PRESENTER_STANDBY, payload);
       }
     );
 

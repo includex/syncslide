@@ -225,6 +225,14 @@ export default function RemotePage({
     toastTimer.current = setTimeout(() => setToast(null), 1500);
   }
 
+  // QR 띄우기 화면이면 세션을 대기(READY)로 → 디스플레이가 QR 표시
+  // (초기 진입 + Radial로 복귀 모두 커버, 잔존 ACTIVE 상태도 초기화)
+  useEffect(() => {
+    if (connected && mode === 'qr') {
+      socketRef.current?.emit(SOCKET_EVENTS.PRESENTER_STANDBY, { sessionId });
+    }
+  }, [connected, mode, sessionId]);
+
   // 언마운트 시 타이머 정리
   useEffect(
     () => () => {
@@ -357,11 +365,13 @@ export default function RemotePage({
 
   // QR 띄우기 화면의 '시작하기' → 최초 1회 발표자 활성화 + Wake Lock, 슬라이드 모드 전환
   function start() {
+    // 매번 활성화 emit (QR 대기에서 복귀 시 디스플레이를 다시 ACTIVE로)
+    socketRef.current?.emit(SOCKET_EVENTS.PRESENTER_ACTIVATE, { sessionId });
     if (!activatedRef.current) {
+      // 최초 1회: Wake Lock + 녹음 + 타임라인 시작
       activatedRef.current = true;
-      socketRef.current?.emit(SOCKET_EVENTS.PRESENTER_ACTIVATE, { sessionId });
       wakeLock.enable();
-      timeline.start(); // SESSION_START(t=0) + 녹음 시작
+      timeline.start(); // SESSION_START(t=0)
       timeline.push({ type: 'SLIDE_CHANGE', page: pageRef.current });
       void audio.start();
     }

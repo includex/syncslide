@@ -80,6 +80,8 @@ export interface QuestionAddedPayload {
 export interface ClientToServerEvents {
   join_room: (payload: JoinRoomPayload) => void;
   presenter_activate: (payload: PresenterActivatePayload) => void;
+  /** 발표자가 QR 띄우기(대기) 화면으로 → 세션 READY 복귀, 디스플레이 QR 표시 */
+  presenter_standby: (payload: PresenterActivatePayload) => void;
   slide_change: (payload: SlideChangePayload) => void;
   draw_event: (payload: DrawEventPayload) => void;
   question_submit: (payload: QuestionSubmitPayload) => void;
@@ -91,6 +93,7 @@ export interface ClientToServerEvents {
 export interface ServerToClientEvents {
   session_state: (payload: SessionStatePayload) => void;
   presenter_activate: (payload: PresenterActivatePayload) => void;
+  presenter_standby: (payload: PresenterActivatePayload) => void;
   slide_change: (payload: SlideChangePayload) => void;
   draw_event: (payload: DrawEventPayload) => void;
   question_added: (payload: QuestionAddedPayload) => void;
@@ -103,6 +106,7 @@ export const SOCKET_EVENTS = {
   JOIN_ROOM: 'join_room',
   SESSION_STATE: 'session_state',
   PRESENTER_ACTIVATE: 'presenter_activate',
+  PRESENTER_STANDBY: 'presenter_standby',
   SLIDE_CHANGE: 'slide_change',
   DRAW_EVENT: 'draw_event',
   QUESTION_SUBMIT: 'question_submit',

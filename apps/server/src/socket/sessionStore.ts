@@ -40,8 +40,16 @@ export function activateSession(
   const state = getOrCreateSession(sessionId);
   state.status = 'ACTIVE';
   state.presenterSocketId = presenterSocketId;
-  state.currentPage = 1;
+  // 최초 활성화는 1페이지, 재활성화(QR 대기에서 복귀)는 기존 페이지 유지
+  state.currentPage = state.currentPage > 0 ? state.currentPage : 1;
   state.startedAt = startedAt;
+  return state;
+}
+
+/** 발표자가 QR 대기 화면으로 → 세션을 READY로 되돌림 (페이지는 유지) */
+export function standbySession(sessionId: string): LiveSessionState {
+  const state = getOrCreateSession(sessionId);
+  state.status = 'READY';
   return state;
 }
 
