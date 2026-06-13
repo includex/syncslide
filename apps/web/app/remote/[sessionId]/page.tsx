@@ -36,7 +36,7 @@ const PEN_RED = '#FF6B6B';
 const RADIAL_BUTTONS: { key: RadialSection; label: string; angle: number }[] = [
   { key: 'slide', label: '슬라이드', angle: 270 }, // 12시 (위)
   { key: 'qa', label: 'Q&A', angle: 330 }, // 2시 (우상단)
-  { key: 'end', label: '발표 끝내기', angle: 210 }, // 10시 (좌상단)
+  { key: 'end', label: '발표 끝', angle: 210 }, // 10시 (좌상단)
 ];
 
 /** 롱프레스 중심 기준 버튼 오프셋(px) */
