@@ -5,7 +5,7 @@
  * 변경 시 PR + 상대 리뷰 필수 (WORKFLOW.md §5).
  */
 
-import type { DrawEvent, Role, SessionStatus } from './session.js';
+import type { DrawEvent, Role, SessionStatus } from './session';
 
 // ── Client → Server ──────────────────────────────────────────────
 
