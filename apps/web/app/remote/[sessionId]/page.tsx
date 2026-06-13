@@ -21,6 +21,9 @@ import {
 import { useRemoteStore, type RemoteMode } from '@/lib/remoteStore';
 import { useWakeLock } from '@/lib/useWakeLock';
 import { useCanvasDraw, PEN_COLOR, PEN_WIDTH } from '@/lib/useCanvasDraw';
+import { useTimeline } from '@/lib/useTimeline';
+import { useAudioRecorder } from '@/lib/useAudioRecorder';
+import { api } from '@/lib/api';
 
 const SWIPE_THRESHOLD = 50;
 const TAP_MOVE_MAX = 10;
@@ -120,6 +123,8 @@ export default function RemotePage({
 
   const wakeLock = useWakeLock();
   const draw = useCanvasDraw(canvasRef);
+  const timeline = useTimeline();
+  const audio = useAudioRecorder();
 
   // 줌/팬 (리모컨 로컬, 판서 모드 전용)
   const [transform, setTransform] = useState({ scale: 1, tx: 0, ty: 0 });
@@ -234,8 +239,9 @@ export default function RemotePage({
       if (clamped === pageRef.current) return;
       setPage(clamped);
       socketRef.current?.emit(SOCKET_EVENTS.SLIDE_CHANGE, { page: clamped });
+      timeline.push({ type: 'SLIDE_CHANGE', page: clamped });
     },
-    [totalPages, setPage]
+    [totalPages, setPage, timeline]
   );
 
   // ── 좌표 정규화 (transform 반영된 slideRef 기준) ────────
@@ -258,6 +264,18 @@ export default function RemotePage({
       ...(p ? { x: p.x, y: p.y } : {}),
       ...(type === 'start' ? { color: PEN_COLOR, thickness: PEN_WIDTH } : {}),
     });
+    // 타임라인 기록 (PRD §15)
+    if (type === 'start') {
+      timeline.push({ type: 'DRAW_START', color: PEN_COLOR, thickness: PEN_WIDTH });
+    } else if (type === 'move' && p) {
+      timeline.push({ type: 'DRAW_MOVE', x: p.x, y: p.y });
+    } else if (type === 'end') {
+      timeline.push({ type: 'DRAW_END' });
+    } else if (type === 'clear') {
+      timeline.push({ type: 'DRAW_CLEAR', page: pageRef.current });
+    } else if (type === 'laser' && p) {
+      timeline.push({ type: 'LASER_POINTER', x: p.x, y: p.y });
+    }
   }
 
   function fireLaser(clientX: number, clientY: number) {
@@ -301,10 +319,23 @@ export default function RemotePage({
     else if (sel === 'end') setEndConfirm(true);
   }
 
-  function endPresentation() {
-    socketRef.current?.emit(SOCKET_EVENTS.PRESENTATION_END, { sessionId });
+  // 발표 끝: 녹음 정지 + 종료 + 오디오·타임라인 업로드 (PRD §7.6)
+  async function endPresentation() {
     setEndConfirm(false);
-    setMode('slide');
+    socketRef.current?.emit(SOCKET_EVENTS.PRESENTATION_END, { sessionId });
+    timeline.end();
+    const blob = await audio.stop();
+    showToast('저장 중…');
+    try {
+      const form = new FormData();
+      if (blob) form.append('audio', blob, 'recording.webm');
+      form.append('timeline', JSON.stringify(timeline.get()));
+      await api.saveRecording(sessionId, form);
+      showToast('저장 완료');
+    } catch {
+      showToast('저장 실패 · 다시 시도해 주세요');
+    }
+    setMode('qr');
   }
 
   // QR 띄우기 화면의 '시작하기' → 최초 1회 발표자 활성화 + Wake Lock, 슬라이드 모드 전환
@@ -313,6 +344,9 @@ export default function RemotePage({
       activatedRef.current = true;
       socketRef.current?.emit(SOCKET_EVENTS.PRESENTER_ACTIVATE, { sessionId });
       wakeLock.enable();
+      timeline.start(); // SESSION_START(t=0) + 녹음 시작
+      timeline.push({ type: 'SLIDE_CHANGE', page: pageRef.current });
+      void audio.start();
     }
     setMode('slide');
   }
@@ -325,6 +359,8 @@ export default function RemotePage({
       questionId: id,
       isVisible: next !== null,
     });
+    if (next) timeline.push({ type: 'QA_SELECT', questionId: id });
+    else timeline.push({ type: 'QA_HIDE' });
   }
 
   // ── 포인터 제스처 ───────────────────────────────────────
@@ -495,7 +531,24 @@ export default function RemotePage({
       <section className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden">
         {/* 연결 상태 배지 (좌상단) — Q&A 화면은 자체 상단바 사용 */}
         {mode !== 'qa' && (
-          <div className="absolute left-3 top-3 z-20">
+          <div className="absolute left-3 top-3 z-20 flex items-center gap-2">
+            {/* 녹음 상태: 점만 간단히 (녹음 중 빨강 / 거부·미지원 회색) */}
+            {audio.status === 'recording' && (
+              <span
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: '#FF3B30' }}
+                aria-label="녹음 중"
+              />
+            )}
+            {(audio.status === 'denied' ||
+              audio.status === 'unsupported' ||
+              audio.status === 'error') && (
+              <span
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: C.textSecondary }}
+                aria-label="녹음 안 함"
+              />
+            )}
             <span
               className="rounded-full px-3 py-1 text-xs font-semibold"
               style={
