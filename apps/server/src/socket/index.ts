@@ -27,6 +27,7 @@ import {
   setCurrentPage,
   setHighlightedQuestion,
 } from './sessionStore.js';
+import { verifyPresenter } from './auth.js';
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
 type IOSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -35,12 +36,13 @@ export function registerSocketHandlers(io: IOServer): void {
   io.on('connection', (socket: IOSocket) => {
     let joinedSessionId: string | null = null;
     let role: JoinRoomPayload['role'] | null = null;
+    let presenterToken: string | undefined;
 
     socket.on(SOCKET_EVENTS.JOIN_ROOM, (payload: JoinRoomPayload) => {
-      const { sessionId, role: joinRole } = payload;
-      // TODO(Dev B): presenter 역할은 token / 로그인 세션으로 소유권 검증 (PRD §18)
+      const { sessionId, role: joinRole, token } = payload;
       joinedSessionId = sessionId;
       role = joinRole;
+      presenterToken = token;
       socket.join(sessionId);
 
       const state = getOrCreateSession(sessionId);
@@ -55,8 +57,11 @@ export function registerSocketHandlers(io: IOServer): void {
 
     socket.on(
       SOCKET_EVENTS.PRESENTER_ACTIVATE,
-      (payload: PresenterActivatePayload) => {
+      async (payload: PresenterActivatePayload) => {
         if (role !== 'presenter') return;
+        // 발표자 소유권 검증 (PRD §7.3, §18). dev에서는 stub이 항상 허용.
+        const ok = await verifyPresenter(payload.sessionId, presenterToken);
+        if (!ok) return;
         const state = activateSession(payload.sessionId, socket.id, Date.now());
         // 모든 클라이언트를 첫 슬라이드로 동시 전환 (PRD §7.3)
         io.to(payload.sessionId).emit(SOCKET_EVENTS.PRESENTER_ACTIVATE, payload);
