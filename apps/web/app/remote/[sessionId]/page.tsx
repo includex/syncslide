@@ -29,19 +29,20 @@ const LASER_FADE_MS = 1200;
 const MIN_SCALE = 1;
 const MAX_SCALE = 3;
 const LONG_PRESS_MS = 450;
-const RADIAL_DIST = 112; // 롱프레스 지점 → 버튼 중심 거리 (엄지로 누르기 편하게)
+const RADIAL_DIST = 130; // 롱프레스 지점 → 버튼 중심 거리 (엄지로 누르기 편하게)
 const RADIAL_BUTTON = 70; // 버튼 지름(px) — 64의 1.1배
 const RADIAL_HIT = 46; // 선택 히트 반경
 
-/** Radial Menu 섹션 (롱프레스 지점 기준 위쪽으로: 12시=슬라이드, 2시=Q&A, 10시=발표 끝내기) */
-type RadialSection = 'slide' | 'qa' | 'end';
+/** Radial Menu 섹션 (롱프레스 지점 기준 위쪽 부채꼴) */
+type RadialSection = 'slide' | 'qa' | 'end' | 'qr';
 const PEN_RED = '#FF6B6B';
 
-/** 버튼 3개 배치 (각도: 0=오른쪽, 시계방향 / 화면 좌표) */
+/** 버튼 4개 배치 (각도: 0=오른쪽, 시계방향 / 화면 좌표, 12시=270 기준 위쪽 팬) */
 const RADIAL_BUTTONS: { key: RadialSection; label: string; angle: number }[] = [
-  { key: 'slide', label: '슬라이드', angle: 270 }, // 12시 (위)
-  { key: 'qa', label: 'Q&A', angle: 330 }, // 2시 (우상단)
-  { key: 'end', label: '발표 끝', angle: 210 }, // 10시 (좌상단)
+  { key: 'end', label: '발표 끝', angle: 210 }, // 좌상단 (위험, 가장자리)
+  { key: 'slide', label: '슬라이드', angle: 250 },
+  { key: 'qa', label: 'Q&A', angle: 290 },
+  { key: 'qr', label: 'QR 띄우기', angle: 330 }, // 우상단
 ];
 
 /** 롱프레스 중심 기준 버튼 오프셋(px) */
@@ -162,12 +163,7 @@ export default function RemotePage({
     socket.on('connect', () => {
       setConnected(true);
       socket.emit(SOCKET_EVENTS.JOIN_ROOM, { sessionId, role: 'presenter' });
-      // 진입 즉시 자동 활성화 (REMOTE_MOBILE_UX: 시작 버튼 없음)
-      if (!activatedRef.current) {
-        activatedRef.current = true;
-        socket.emit(SOCKET_EVENTS.PRESENTER_ACTIVATE, { sessionId });
-        wakeLock.enable();
-      }
+      // 활성화는 QR 띄우기 화면의 '시작하기' 버튼에서 수행 (그 전까지 디스플레이는 QR 대기화면 유지)
     });
     socket.on('disconnect', () => setConnected(false));
     socket.on(SOCKET_EVENTS.SESSION_STATE, (state) => {
@@ -301,12 +297,23 @@ export default function RemotePage({
   function executeRadial(sel: RadialSection) {
     if (sel === 'slide') setMode('slide');
     else if (sel === 'qa') setMode('qa');
+    else if (sel === 'qr') setMode('qr');
     else if (sel === 'end') setEndConfirm(true);
   }
 
   function endPresentation() {
     socketRef.current?.emit(SOCKET_EVENTS.PRESENTATION_END, { sessionId });
     setEndConfirm(false);
+    setMode('slide');
+  }
+
+  // QR 띄우기 화면의 '시작하기' → 최초 1회 발표자 활성화 + Wake Lock, 슬라이드 모드 전환
+  function start() {
+    if (!activatedRef.current) {
+      activatedRef.current = true;
+      socketRef.current?.emit(SOCKET_EVENTS.PRESENTER_ACTIVATE, { sessionId });
+      wakeLock.enable();
+    }
     setMode('slide');
   }
 
@@ -566,6 +573,24 @@ export default function RemotePage({
             >
               {page} / {totalPages}
             </div>
+
+            {/* QR 띄우기(시작) 화면: 슬라이드 영역 딤드 + 가운데 시작하기 */}
+            {mode === 'qr' && (
+              <>
+                <div
+                  className="pointer-events-none absolute inset-0"
+                  style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                />
+                <button
+                  onClick={start}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-xl px-10 py-4 text-lg font-semibold"
+                  style={{ backgroundColor: C.accent, color: C.paper }}
+                >
+                  시작하기
+                </button>
+              </>
+            )}
 
             {/* 판서 모드: 지우기 플로팅 버튼 */}
             {mode === 'draw' && (

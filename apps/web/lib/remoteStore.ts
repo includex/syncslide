@@ -10,8 +10,8 @@
 import { create } from 'zustand';
 import type { SessionStatus } from '@syncslide/shared';
 
-/** 리모컨 모드 (REMOTE_MOBILE_UX.md §3) — qa는 Radial Menu로 진입 */
-export type RemoteMode = 'slide' | 'script' | 'laser' | 'draw' | 'qa';
+/** 리모컨 모드 (REMOTE_MOBILE_UX.md §3) — qr=시작 화면(첫 화면), qa는 Radial Menu로 진입 */
+export type RemoteMode = 'qr' | 'slide' | 'script' | 'laser' | 'draw' | 'qa';
 
 interface RemoteState {
   /** 세션 상태머신 미러 (서버가 진실의 원천, 리모컨은 반영만) */
@@ -40,7 +40,7 @@ const initial = {
   connected: false,
   currentPage: 0,
   totalPages: 0,
-  mode: 'slide' as RemoteMode,
+  mode: 'qr' as RemoteMode, // 첫 화면 = QR 띄우기(시작 화면)
 };
 
 export const useRemoteStore = create<RemoteState>((set) => ({

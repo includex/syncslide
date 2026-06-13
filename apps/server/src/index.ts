@@ -9,6 +9,11 @@ import presentationsRouter from './routes/presentations.js';
 import sessionsRouter from './routes/sessions.js';
 import recordingsRouter from './routes/recordings.js';
 
+// 라우트(DB/스토리지)에서 발생한 비동기 오류로 소켓 서버 전체가 죽지 않도록 가드.
+// (MVP: DB 미연결 환경에서도 실시간 동기화는 계속 동작해야 함 — PRD §21)
+process.on('unhandledRejection', (err) => console.error('[unhandledRejection]', err));
+process.on('uncaughtException', (err) => console.error('[uncaughtException]', err));
+
 const PORT = Number(process.env.PORT ?? 4000);
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:3000';
 
