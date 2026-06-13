@@ -25,7 +25,7 @@ const MIN_SCALE = 1;
 const MAX_SCALE = 3;
 const LONG_PRESS_MS = 450;
 const RADIAL_DIST = 112; // 롱프레스 지점 → 버튼 중심 거리 (엄지로 누르기 편하게)
-const RADIAL_BUTTON = 64; // 버튼 지름(px)
+const RADIAL_BUTTON = 70; // 버튼 지름(px) — 64의 1.1배
 const RADIAL_HIT = 46; // 선택 히트 반경
 
 /** Radial Menu 섹션 (롱프레스 지점 기준 위쪽으로: 12시=슬라이드, 2시=Q&A, 10시=발표 끝내기) */
