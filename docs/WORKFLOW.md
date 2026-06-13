@@ -65,10 +65,8 @@ syncslide/
 
 ### Phase 2 — 상호작용 (PRD §22 Phase 2)
 
-- **Dev A**: 가로 4-모드 리모컨(슬라이드/스크립트/레이저/판서, `REMOTE_MOBILE_UX.md`), Canvas 판서(정규화 좌표 §11.2) `draw_event` emit, 지우개·전체지우기, 레이저 포인터(1.2s 페이드), **스크립트 모드 표시**(PRD §11.4), 리모컨 Q&A 탭 + `qa_highlight` 선택
+- **Dev A**: Canvas 판서(정규화 좌표 §11.2) `draw_event` emit, 지우개·전체지우기, 레이저 포인터(1.2s 페이드), 리모컨 Q&A 탭 + `qa_highlight` 선택
 - **Dev B**: 디스플레이/청중 측 판서·레이저·Q&A 팝업 수신 렌더, 청중 Q&A 입력창 + `question_submit`, 질문 DB 저장 + rate limit(§18.3), 정렬
-
-> **스크립트(자막) 요건** (PRD §11.4): `Presentation.scripts: String[]`(`images`와 평행). **발표자 리모컨 전용** — 소켓 미전송, 디스플레이/청중 비노출, 리플레이 제외. 표시 = Dev A. `scripts` 채우는 작성/추출 경로는 후속 과제(미정 시 "스크립트 없음"). 스키마 필드 추가는 공유 계약 변경이므로 §5 규칙 적용(상대 리뷰).
 
 ### Phase 3 — 리플레이 (PRD §22 Phase 3)
 

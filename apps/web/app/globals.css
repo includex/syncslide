@@ -2,10 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+:root {
+  --color-electric-violet: #7270ff;
+  --color-signal-blue: #1560fb;
+  --color-midnight-ink: #1c1a2c;
+  --color-deep-indigo: #2f2b4a;
+  --color-slate: #4b5563;
+  --color-silver: #9ca3af;
+  --color-paper: #ffffff;
+  --color-bone: #f9fafb;
+  --color-pebble: #f3f4f6;
+  --color-mist: #e5e7eb;
+  --color-fog: #d9dbda;
+  --color-dark-base: #0f0e17;
+  --color-dark-surface: #1c1a2c;
+  --color-dark-border: #2f2b4a;
+}
+
 html,
 body {
   padding: 0;
   margin: 0;
-  background: #0a0a0a;
-  color: #ededed;
+  background: #f3f4f6; /* Pebble — 페이지 캔버스 */
+  color: #2f2b4a; /* Deep Indigo */
+  font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
 }

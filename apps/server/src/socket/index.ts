@@ -1,9 +1,6 @@
 /**
  * Socket.io 서버 — 룸 join/leave + 실시간 이벤트 중계 (PRD §16)
- * 오너: Dev A.
- *
- * 발표자(presenter)가 emit한 제어 이벤트를 같은 룸의 display/audience 에게 broadcast.
- * 인증 검증(presenter 소유권)은 Dev B가 제공하는 훅을 끼우는 자리를 TODO로 남겨둠.
+ * 오너: Dev A.  question_submit DB 저장은 Dev B (WORKFLOW.md §4 Phase 2).
  */
 import type { Server, Socket } from 'socket.io';
 import {
@@ -17,6 +14,7 @@ import {
   type DrawEventPayload,
   type QaHighlightPayload,
   type PresentationEndPayload,
+  type QuestionSubmitPayload,
 } from '@syncslide/shared';
 import {
   activateSession,
@@ -28,9 +26,26 @@ import {
   setHighlightedQuestion,
 } from './sessionStore.js';
 import { verifyPresenter } from './auth.js';
+import { prisma } from '../lib/prisma.js';
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
 type IOSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
+
+// 간단한 인메모리 rate limit: 소켓당 Q&A 제출 추적 (PRD §18.3)
+const qaRateMap = new Map<string, { count: number; resetAt: number }>();
+const QA_WINDOW_MS = 10_000;
+const QA_MAX_PER_WINDOW = 3;
+
+function isRateLimited(socketId: string): boolean {
+  const now = Date.now();
+  const entry = qaRateMap.get(socketId);
+  if (!entry || now > entry.resetAt) {
+    qaRateMap.set(socketId, { count: 1, resetAt: now + QA_WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  return entry.count > QA_MAX_PER_WINDOW;
+}
 
 export function registerSocketHandlers(io: IOServer): void {
   io.on('connection', (socket: IOSocket) => {
@@ -46,7 +61,6 @@ export function registerSocketHandlers(io: IOServer): void {
       socket.join(sessionId);
 
       const state = getOrCreateSession(sessionId);
-      // 최초 입장 / 재연결 시 현재 상태 전달 (PRD §13.2, §16.2)
       socket.emit(SOCKET_EVENTS.SESSION_STATE, {
         status: state.status,
         currentPage: state.currentPage,
@@ -85,27 +99,43 @@ export function registerSocketHandlers(io: IOServer): void {
 
     socket.on(SOCKET_EVENTS.QA_HIGHLIGHT, (payload: QaHighlightPayload) => {
       if (role !== 'presenter' || !joinedSessionId) return;
-      setHighlightedQuestion(
-        joinedSessionId,
-        payload.isVisible ? payload.questionId : undefined
-      );
+      setHighlightedQuestion(joinedSessionId, payload.isVisible ? payload.questionId : undefined);
       socket.to(joinedSessionId).emit(SOCKET_EVENTS.QA_HIGHLIGHT, payload);
     });
 
-    // question_submit 은 DB 저장 + 발표자 전달이 필요 → Dev B가 routes/socket에서 구현
-    // (Phase 0 골격에서는 미구현)
+    // Dev B: question_submit — DB 저장 후 발표자에게 전달 (PRD §16.6, §18.3)
+    socket.on(SOCKET_EVENTS.QUESTION_SUBMIT, async (payload: QuestionSubmitPayload) => {
+      if (isRateLimited(socket.id)) return;
+      if (!payload.content?.trim() || payload.content.length > 300) return;
 
-    socket.on(
-      SOCKET_EVENTS.PRESENTATION_END,
-      (payload: PresentationEndPayload) => {
-        if (role !== 'presenter') return;
-        finishSession(payload.sessionId);
-        io.to(payload.sessionId).emit(SOCKET_EVENTS.PRESENTATION_END, payload);
+      try {
+        const question = await prisma.question.create({
+          data: {
+            sessionId: payload.sessionId,
+            nickname: payload.nickname ?? null,
+            content: payload.content.trim(),
+          },
+        });
+        io.to(payload.sessionId).emit(SOCKET_EVENTS.QUESTION_ADDED, {
+          id: question.id,
+          sessionId: question.sessionId,
+          nickname: question.nickname,
+          content: question.content,
+          createdAt: question.createdAt.toISOString(),
+        });
+      } catch {
+        // 세션이 없거나 DB 오류 시 무시
       }
-    );
+    });
+
+    socket.on(SOCKET_EVENTS.PRESENTATION_END, (payload: PresentationEndPayload) => {
+      if (role !== 'presenter') return;
+      finishSession(payload.sessionId);
+      io.to(payload.sessionId).emit(SOCKET_EVENTS.PRESENTATION_END, payload);
+    });
 
     socket.on('disconnect', () => {
-      // MVP: 재연결 시 session_state 재전송으로 복구 (PRD §13.2)
+      qaRateMap.delete(socket.id);
     });
   });
 }

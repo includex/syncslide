@@ -2,8 +2,9 @@
 // 공동 소유 (WORKFLOW.md §6). 변경 시 양쪽 합의 필요.
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL") // Supabase Connection String
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
