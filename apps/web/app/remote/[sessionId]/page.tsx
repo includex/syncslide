@@ -31,6 +31,9 @@ const DOUBLE_TAP_MS = 300;
 const LASER_FADE_MS = 1200;
 const MIN_SCALE = 1;
 const MAX_SCALE = 3;
+// 테스트용: 서버 업로드 대신 로컬 파일 다운로드로 저장
+const LOCAL_SAVE = process.env.NEXT_PUBLIC_LOCAL_SAVE === 'true';
+
 const LONG_PRESS_MS = 450;
 const RADIAL_DIST = 130; // 롱프레스 지점 → 버튼 중심 거리 (엄지로 누르기 편하게)
 const RADIAL_BUTTON = 70; // 버튼 지름(px) — 64의 1.1배
@@ -319,17 +322,31 @@ export default function RemotePage({
     else if (sel === 'end') setEndConfirm(true);
   }
 
-  // 발표 끝: 녹음 정지 + 종료 + 오디오·타임라인 업로드 (PRD §7.6)
+  // 발표 끝: 녹음 정지 + 종료 + 저장 (PRD §7.6)
+  // NEXT_PUBLIC_LOCAL_SAVE=true 면 서버 업로드 대신 로컬 파일 다운로드(테스트용)
   async function endPresentation() {
     setEndConfirm(false);
     socketRef.current?.emit(SOCKET_EVENTS.PRESENTATION_END, { sessionId });
     timeline.end();
     const blob = await audio.stop();
+    const events = timeline.get();
+
+    if (LOCAL_SAVE) {
+      downloadBlob(
+        new Blob([JSON.stringify(events, null, 2)], { type: 'application/json' }),
+        `timeline-${sessionId}.json`
+      );
+      if (blob) downloadBlob(blob, `recording-${sessionId}.webm`);
+      showToast(`로컬 저장 완료 (이벤트 ${events.length}개${blob ? ' + 오디오' : ''})`);
+      setMode('qr');
+      return;
+    }
+
     showToast('저장 중…');
     try {
       const form = new FormData();
       if (blob) form.append('audio', blob, 'recording.webm');
-      form.append('timeline', JSON.stringify(timeline.get()));
+      form.append('timeline', JSON.stringify(events));
       await api.saveRecording(sessionId, form);
       showToast('저장 완료');
     } catch {
@@ -966,6 +983,18 @@ function QuestionCard({
       )}
     </button>
   );
+}
+
+/** Blob을 로컬 파일로 다운로드 (테스트용 로컬 저장) */
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // ── 기하 헬퍼 ──
