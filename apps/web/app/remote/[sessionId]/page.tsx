@@ -76,6 +76,7 @@ const C = {
   paper: '#ffffff',
   fog: '#d9dbda',
   mist: '#e5e7eb',
+  card: '#2a2840', // Q&A 질문 카드 배경 (페이지 Dark Base와 색으로만 구분)
 };
 
 interface LaserDot {
@@ -832,10 +833,11 @@ function QaScreen({
             아직 들어온 질문이 없습니다
           </p>
         ) : (
-          questions.map((q) => (
+          questions.map((q, i) => (
             <QuestionCard
               key={q.id}
               q={q}
+              index={i}
               active={highlightedId === q.id}
               onClick={() => onToggle(q.id)}
             />
@@ -846,13 +848,15 @@ function QaScreen({
   );
 }
 
-/** Q&A 질문 카드 — 비활성: 다크서피스+Mist 보더 / 활성: violet 전체 + 확성기 */
+/** Q&A 질문 카드 — 보더 없음, 배경색으로 구분 / 활성: violet 전체 + 확성기 */
 function QuestionCard({
   q,
+  index,
   active,
   onClick,
 }: {
   q: QaItem;
+  index: number;
   active: boolean;
   onClick: () => void;
 }) {
@@ -861,16 +865,21 @@ function QuestionCard({
       onClick={onClick}
       className="relative block w-full text-left"
       style={{
-        backgroundColor: active ? C.accent : C.surface,
-        border: active ? 'none' : `1px solid ${C.mist}`,
-        borderRadius: 8,
-        padding: 16,
+        backgroundColor: active ? C.accent : C.card,
+        borderRadius: 16,
+        padding: 20,
       }}
     >
-      <p style={{ fontSize: 16, fontWeight: 400, color: C.paper }}>{q.content}</p>
+      <span
+        className="mb-1 block text-xs"
+        style={{ color: active ? 'rgba(255,255,255,0.75)' : C.textSecondary }}
+      >
+        Q{index + 1}
+      </span>
+      <p style={{ fontSize: 16, fontWeight: 500, color: C.paper }}>{q.content}</p>
       {active && (
         <span
-          className="absolute right-3 top-3 text-lg"
+          className="absolute right-4 top-4 text-lg"
           style={{ color: C.paper }}
           aria-label="강조 중"
         >
