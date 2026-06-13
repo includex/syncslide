@@ -311,11 +311,11 @@ export default function RemotePage({
 
   return (
     <main
-      className="flex h-screen w-screen overflow-hidden"
+      className="flex h-screen w-screen overflow-hidden landscape:flex-row portrait:flex-col"
       style={{ backgroundColor: C.base, color: C.textPrimary }}
     >
-      {/* ── 슬라이드 / 콘텐츠 영역 ── */}
-      <section className="relative flex-1 overflow-hidden">
+      {/* ── 슬라이드 / 콘텐츠 영역 (세로 모드: 16:9 중앙 정렬, 여백 Dark Base) ── */}
+      <section className="relative flex flex-1 items-center justify-center overflow-hidden">
         {/* 연결 상태 배지 (좌상단) */}
         <div className="absolute left-3 top-3 z-20">
           <span
@@ -348,7 +348,7 @@ export default function RemotePage({
         ) : (
           // ── 슬라이드 / 레이저 / 판서 모드 ──
           <div
-            className="relative h-full w-full touch-none select-none"
+            className="touch-none select-none landscape:absolute landscape:inset-0 portrait:relative portrait:aspect-video portrait:w-full"
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
@@ -437,7 +437,7 @@ export default function RemotePage({
       {/* ── 우측 버튼 패널 (판서 모드에서는 숨김) ── */}
       {showPanel && (
         <nav
-          className="flex w-1/5 min-w-[88px] flex-col"
+          className="flex landscape:w-1/5 landscape:min-w-[88px] landscape:flex-col portrait:h-24 portrait:w-full portrait:flex-row"
           style={{ backgroundColor: C.surface }}
         >
           <ModeButton
@@ -445,13 +445,19 @@ export default function RemotePage({
             active={mode === 'script'}
             onClick={() => toggleMode('script')}
           />
-          <div style={{ height: 1, backgroundColor: C.border }} />
+          <div
+            className="shrink-0 landscape:h-px landscape:w-full portrait:h-full portrait:w-px"
+            style={{ backgroundColor: C.border }}
+          />
           <ModeButton
             label="레이저"
             active={mode === 'laser'}
             onClick={() => toggleMode('laser')}
           />
-          <div style={{ height: 1, backgroundColor: C.border }} />
+          <div
+            className="shrink-0 landscape:h-px landscape:w-full portrait:h-full portrait:w-px"
+            style={{ backgroundColor: C.border }}
+          />
           {/* 판서 진입 시 패널이 숨겨지므로 active 표시는 불필요 */}
           <ModeButton label="판서" active={false} onClick={() => setMode('draw')} />
         </nav>
