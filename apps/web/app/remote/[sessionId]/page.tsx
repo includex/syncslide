@@ -24,8 +24,10 @@ const LASER_FADE_MS = 1200;
 const MIN_SCALE = 1;
 const MAX_SCALE = 3;
 const LONG_PRESS_MS = 450;
-const RADIAL_RADIUS = 96;
-const RADIAL_DEADZONE = 28;
+const RADIAL_RADIUS = 150; // 도넛 외곽 반지름 (기존 96 → 1.5배+)
+const RADIAL_INNER_RATIO = 0.4; // 내부 빈 원 = 전체의 40%
+const RADIAL_INNER = RADIAL_RADIUS * RADIAL_INNER_RATIO;
+const RADIAL_DEADZONE = RADIAL_INNER; // 가운데 빈 영역(투명)에서 떼면 선택 취소
 
 /** Radial Menu 섹션 (가로 기준: 12시=슬라이드, 4시=Q&A, 8시=발표 끝내기) */
 type RadialSection = 'slide' | 'qa' | 'end';
@@ -719,7 +721,7 @@ function RadialMenu({
         {sections.map((s) => (
           <path
             key={s.key}
-            d={sectorPath(s.center - 60, s.center + 60, R)}
+            d={ringSectorPath(s.center - 60, s.center + 60, R, RADIAL_INNER, R)}
             fill={sel === s.key ? C.accent : C.border}
             stroke={C.surface}
             strokeWidth={2}
@@ -728,13 +730,14 @@ function RadialMenu({
       </svg>
       {sections.map((s) => {
         const rad = (s.center * Math.PI) / 180;
+        const midR = (RADIAL_INNER + R) / 2; // 도넛 띠 중앙
         return (
           <span
             key={s.key}
             className="absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap text-sm font-medium"
             style={{
-              left: R + 0.62 * R * Math.cos(rad),
-              top: R + 0.62 * R * Math.sin(rad),
+              left: R + midR * Math.cos(rad),
+              top: R + midR * Math.sin(rad),
               color: s.key === 'end' ? PEN_RED : C.paper,
             }}
           >
@@ -746,15 +749,27 @@ function RadialMenu({
   );
 }
 
-/** 중심(R,R)·반지름 R 원에서 startDeg~endDeg 부채꼴 path (각도: 0=오른쪽, 시계방향) */
-function sectorPath(startDeg: number, endDeg: number, R: number) {
-  const pt = (deg: number) => {
-    const r = (deg * Math.PI) / 180;
-    return [R + R * Math.cos(r), R + R * Math.sin(r)];
+/**
+ * 도넛(ring) 부채꼴 path: 중심(cx,cx) 기준 outerR~innerR 사이 띠를 startDeg~endDeg로.
+ * 가운데(innerR 안쪽)는 비워 투명하게 둔다. (각도: 0=오른쪽, 시계방향)
+ */
+function ringSectorPath(
+  startDeg: number,
+  endDeg: number,
+  outerR: number,
+  innerR: number,
+  cx: number
+) {
+  const pt = (deg: number, rad: number) => {
+    const a = (deg * Math.PI) / 180;
+    return [cx + rad * Math.cos(a), cx + rad * Math.sin(a)];
   };
-  const [x1, y1] = pt(startDeg);
-  const [x2, y2] = pt(endDeg);
-  return `M ${R} ${R} L ${x1} ${y1} A ${R} ${R} 0 0 1 ${x2} ${y2} Z`;
+  const [ox1, oy1] = pt(startDeg, outerR);
+  const [ox2, oy2] = pt(endDeg, outerR);
+  const [ix2, iy2] = pt(endDeg, innerR);
+  const [ix1, iy1] = pt(startDeg, innerR);
+  // 외곽호(시계방향) → 안쪽 끝으로 → 내부호(반시계) → 닫기
+  return `M ${ox1} ${oy1} A ${outerR} ${outerR} 0 0 1 ${ox2} ${oy2} L ${ix2} ${iy2} A ${innerR} ${innerR} 0 0 0 ${ix1} ${iy1} Z`;
 }
 
 // ── 기하 헬퍼 ──
