@@ -23,6 +23,23 @@ const DOUBLE_TAP_MS = 300;
 const LASER_FADE_MS = 1200;
 const MIN_SCALE = 1;
 const MAX_SCALE = 3;
+const LONG_PRESS_MS = 450;
+const RADIAL_RADIUS = 96;
+const RADIAL_DEADZONE = 28;
+
+/** Radial Menu 섹션 (가로 기준: 12시=슬라이드, 4시=Q&A, 8시=발표 끝내기) */
+type RadialSection = 'slide' | 'qa' | 'end';
+const PEN_RED = '#FF6B6B';
+
+/** 중심 기준 (dx,dy)를 섹션으로 분류. 데드존 내부면 null. */
+function pickSection(dx: number, dy: number): RadialSection | null {
+  if (Math.hypot(dx, dy) < RADIAL_DEADZONE) return null;
+  let deg = (Math.atan2(dy, dx) * 180) / Math.PI; // 0=오른쪽, y아래 → 시계방향 +
+  if (deg < 0) deg += 360;
+  if (deg >= 330 || deg < 90) return 'qa'; // 중심 30° (4시)
+  if (deg < 210) return 'end'; // 중심 150° (8시)
+  return 'slide'; // 210~330°, 중심 270° (12시)
+}
 
 // DESIGN.md §7 다크 토큰
 const C = {
@@ -80,6 +97,19 @@ export default function RemotePage({
   const [toast, setToast] = useState<string | null>(null);
   const laserTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Radial Menu (롱프레스) + 발표 종료 컨펌
+  const [radial, setRadial] = useState<{
+    cx: number;
+    cy: number;
+    sel: RadialSection | null;
+    closing: boolean;
+  } | null>(null);
+  const radialRef = useRef<{ cx: number; cy: number; sel: RadialSection | null } | null>(
+    null
+  );
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [endConfirm, setEndConfirm] = useState(false);
 
   const page = currentPage > 0 ? currentPage : 1;
   const modeRef = useRef<RemoteMode>(mode);
@@ -147,6 +177,16 @@ export default function RemotePage({
     toastTimer.current = setTimeout(() => setToast(null), 1500);
   }
 
+  // 언마운트 시 타이머 정리
+  useEffect(
+    () => () => {
+      if (longPressTimer.current) clearTimeout(longPressTimer.current);
+      if (laserTimer.current) clearTimeout(laserTimer.current);
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    },
+    []
+  );
+
   // ── 슬라이드 전환 ───────────────────────────────────────
   const goTo = useCallback(
     (next: number) => {
@@ -188,6 +228,44 @@ export default function RemotePage({
     laserTimer.current = setTimeout(() => setLaser(null), LASER_FADE_MS);
   }
 
+  // ── Radial Menu (롱프레스) ──────────────────────────────
+  function clearLongPress() {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }
+
+  function openRadial(cx: number, cy: number) {
+    setLaser(null);
+    radialRef.current = { cx, cy, sel: null };
+    setRadial({ cx, cy, sel: null, closing: false });
+  }
+
+  function updateRadialSel(sel: RadialSection | null) {
+    if (!radialRef.current || radialRef.current.sel === sel) return;
+    radialRef.current.sel = sel;
+    setRadial((r) => (r ? { ...r, sel } : r));
+  }
+
+  function closeRadialWithAnim() {
+    radialRef.current = null;
+    setRadial((r) => (r ? { ...r, closing: true } : r));
+    setTimeout(() => setRadial(null), 150);
+  }
+
+  function executeRadial(sel: RadialSection) {
+    if (sel === 'slide') setMode('slide');
+    else if (sel === 'qa') setMode('qa');
+    else if (sel === 'end') setEndConfirm(true);
+  }
+
+  function endPresentation() {
+    socketRef.current?.emit(SOCKET_EVENTS.PRESENTATION_END, { sessionId });
+    setEndConfirm(false);
+    setMode('slide');
+  }
+
   // ── 포인터 제스처 ───────────────────────────────────────
   const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
   const gesture = useRef({
@@ -210,6 +288,14 @@ export default function RemotePage({
     g.moved = 0;
 
     const m = modeRef.current;
+    // 롱프레스 → Radial Menu (판서 모드 제외, 단일 포인터)
+    if (m !== 'draw' && pointers.current.size === 1) {
+      const sx = e.clientX;
+      const sy = e.clientY;
+      clearLongPress();
+      longPressTimer.current = setTimeout(() => openRadial(sx, sy), LONG_PRESS_MS);
+    }
+
     if (m === 'laser') {
       fireLaser(e.clientX, e.clientY);
       return;
@@ -248,6 +334,16 @@ export default function RemotePage({
       Math.hypot(e.clientX - g.startX, e.clientY - g.startY)
     );
 
+    // Radial 활성 중: 드래그로 섹션 선택 (다른 제스처 무시)
+    if (radialRef.current) {
+      updateRadialSel(
+        pickSection(e.clientX - radialRef.current.cx, e.clientY - radialRef.current.cy)
+      );
+      return;
+    }
+    // 롱프레스 대기 중 이동하면 취소 (드래그/스와이프로 간주)
+    if (longPressTimer.current && g.moved > TAP_MOVE_MAX) clearLongPress();
+
     const m = modeRef.current;
     if (m === 'laser') {
       fireLaser(e.clientX, e.clientY);
@@ -276,8 +372,17 @@ export default function RemotePage({
 
   function onPointerUp(e: React.PointerEvent) {
     pointers.current.delete(e.pointerId);
+    clearLongPress();
     const g = gesture.current;
     const m = modeRef.current;
+
+    // Radial 활성 중 손 떼면 선택 섹션 실행 (일반 제스처 건너뜀)
+    if (radialRef.current) {
+      const sel = radialRef.current.sel;
+      closeRadialWithAnim();
+      if (sel) executeRadial(sel);
+      return;
+    }
 
     if (m === 'draw') {
       if (g.drawing && pointers.current.size === 0) {
@@ -428,6 +533,22 @@ export default function RemotePage({
               </div>
             )}
           </div>
+
+          {/* Q&A 화면 (Radial Menu로 진입) — 길게 눌러 메뉴로 복귀 */}
+          {mode === 'qa' && (
+            <div
+              className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 p-8 text-center"
+              style={{ backgroundColor: C.base }}
+            >
+              <h2 className="text-2xl font-bold" style={{ color: C.textPrimary }}>
+                Q&amp;A
+              </h2>
+              <p style={{ color: C.textSecondary }}>아직 들어온 질문이 없습니다</p>
+              <p className="text-xs" style={{ color: C.textSecondary }}>
+                길게 눌러 메뉴에서 슬라이드로 돌아갈 수 있어요
+              </p>
+            </div>
+          )}
         </div>
       </section>
 
@@ -460,12 +581,73 @@ export default function RemotePage({
         </nav>
       )}
 
+      {/* Radial Menu (롱프레스) */}
+      {radial && (
+        <RadialMenu cx={radial.cx} cy={radial.cy} sel={radial.sel} closing={radial.closing} />
+      )}
+
+      {/* 발표 종료 컨펌 */}
+      {endConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
+        >
+          <div
+            className="w-72 rounded-lg p-6"
+            style={{ backgroundColor: C.base, border: `1px solid ${C.border}` }}
+          >
+            <p
+              className="text-center text-base font-medium"
+              style={{ color: C.textPrimary }}
+            >
+              발표를 종료할까요?
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => setEndConfirm(false)}
+                className="flex-1 rounded-xl py-3 text-sm font-medium"
+                style={{ backgroundColor: C.surface, color: C.textSecondary }}
+              >
+                취소
+              </button>
+              <button
+                onClick={endPresentation}
+                className="flex-1 rounded-xl py-3 text-sm font-semibold"
+                style={{ backgroundColor: PEN_RED, color: C.paper }}
+              >
+                종료
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style jsx global>{`
         @keyframes laserFade {
           0% {
             opacity: 1;
           }
           100% {
+            opacity: 0;
+          }
+        }
+        @keyframes radialIn {
+          0% {
+            transform: translate(-50%, -50%) scale(0.7);
+            opacity: 0;
+          }
+          100% {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 0.92;
+          }
+        }
+        @keyframes radialOut {
+          0% {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 0.92;
+          }
+          100% {
+            transform: translate(-50%, -50%) scale(0.7);
             opacity: 0;
           }
         }
@@ -497,6 +679,82 @@ function ModeButton({
       {label}
     </button>
   );
+}
+
+/**
+ * Radial Menu (REMOTE_MOBILE_UX.md §Radial Menu)
+ * 롱프레스 지점 중심으로 120°씩 3등분: 12시 슬라이드 / 4시 Q&A / 8시 발표 끝내기.
+ */
+function RadialMenu({
+  cx,
+  cy,
+  sel,
+  closing,
+}: {
+  cx: number;
+  cy: number;
+  sel: RadialSection | null;
+  closing: boolean;
+}) {
+  const R = RADIAL_RADIUS;
+  const sections: { key: RadialSection; label: string; center: number }[] = [
+    { key: 'slide', label: '슬라이드', center: 270 }, // 12시
+    { key: 'qa', label: 'Q&A', center: 30 }, // 4시
+    { key: 'end', label: '발표 끝내기', center: 150 }, // 8시
+  ];
+  return (
+    <div
+      className="pointer-events-none fixed z-50"
+      style={{
+        left: cx,
+        top: cy,
+        width: 2 * R,
+        height: 2 * R,
+        transform: 'translate(-50%, -50%)',
+        opacity: 0.92,
+        animation: `${closing ? 'radialOut' : 'radialIn'} 150ms forwards`,
+      }}
+    >
+      <svg width={2 * R} height={2 * R} viewBox={`0 0 ${2 * R} ${2 * R}`}>
+        {sections.map((s) => (
+          <path
+            key={s.key}
+            d={sectorPath(s.center - 60, s.center + 60, R)}
+            fill={sel === s.key ? C.accent : C.border}
+            stroke={C.surface}
+            strokeWidth={2}
+          />
+        ))}
+      </svg>
+      {sections.map((s) => {
+        const rad = (s.center * Math.PI) / 180;
+        return (
+          <span
+            key={s.key}
+            className="absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap text-sm font-medium"
+            style={{
+              left: R + 0.62 * R * Math.cos(rad),
+              top: R + 0.62 * R * Math.sin(rad),
+              color: s.key === 'end' ? PEN_RED : C.paper,
+            }}
+          >
+            {s.label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 중심(R,R)·반지름 R 원에서 startDeg~endDeg 부채꼴 path (각도: 0=오른쪽, 시계방향) */
+function sectorPath(startDeg: number, endDeg: number, R: number) {
+  const pt = (deg: number) => {
+    const r = (deg * Math.PI) / 180;
+    return [R + R * Math.cos(r), R + R * Math.sin(r)];
+  };
+  const [x1, y1] = pt(startDeg);
+  const [x2, y2] = pt(endDeg);
+  return `M ${R} ${R} L ${x1} ${y1} A ${R} ${R} 0 0 1 ${x2} ${y2} Z`;
 }
 
 // ── 기하 헬퍼 ──

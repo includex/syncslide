@@ -10,8 +10,8 @@
 import { create } from 'zustand';
 import type { SessionStatus } from '@syncslide/shared';
 
-/** 리모컨 4-모드 (REMOTE_MOBILE_UX.md §3) */
-export type RemoteMode = 'slide' | 'script' | 'laser' | 'draw';
+/** 리모컨 모드 (REMOTE_MOBILE_UX.md §3) — qa는 Radial Menu로 진입 */
+export type RemoteMode = 'slide' | 'script' | 'laser' | 'draw' | 'qa';
 
 interface RemoteState {
   /** 세션 상태머신 미러 (서버가 진실의 원천, 리모컨은 반영만) */
