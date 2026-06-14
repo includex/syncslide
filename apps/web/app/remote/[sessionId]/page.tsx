@@ -212,8 +212,8 @@ export default function RemotePage({
       // 판서는 가로 단일 레이아웃 → 세로면 가로 전환 안내
       showToast(
         portrait
-          ? '가로로 돌려서 판서하세요 · 더블탭으로 종료'
-          : '판서 모드 · 더블탭으로 종료'
+          ? '가로로 돌려서 판서하세요 · 더블탭 전체 지우기 · ✕ 종료'
+          : '판서 모드 · 더블탭 전체 지우기 · ✕ 종료'
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -515,12 +515,13 @@ export default function RemotePage({
         emitDraw('end');
       }
       if (pointers.current.size < 2) g.panStart = null;
-      // 더블탭으로 판서 종료
+      // 더블탭으로 현재 페이지 판서 전체 지우기
       if (g.moved < TAP_MOVE_MAX && pointers.current.size === 0) {
         const now = Date.now();
         if (now - g.lastTapAt < DOUBLE_TAP_MS) {
           g.lastTapAt = 0;
-          setMode('slide');
+          draw.clear();
+          emitDraw('clear');
         } else {
           g.lastTapAt = now;
         }
@@ -672,23 +673,20 @@ export default function RemotePage({
               </>
             )}
 
-            {/* 판서 모드: 지우기 플로팅 버튼 */}
+            {/* 판서 모드: 나가기 플로팅 버튼 (지우기는 더블탭) */}
             {mode === 'draw' && (
               <button
-                onClick={() => {
-                  draw.clear();
-                  emitDraw('clear');
-                }}
+                onClick={() => setMode('slide')}
                 onPointerDown={(e) => e.stopPropagation()}
-                className="absolute bottom-4 right-4 z-20 flex h-14 w-14 items-center justify-center rounded-full text-xl"
+                className="absolute bottom-4 right-4 z-20 flex h-14 w-14 items-center justify-center rounded-full text-2xl"
                 style={{
                   backgroundColor: C.surface,
                   border: `1px solid ${C.fog}`,
                   color: C.textPrimary,
                 }}
-                aria-label="판서 지우기"
+                aria-label="판서 종료"
               >
-                🗑
+                ✕
               </button>
             )}
 
