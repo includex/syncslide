@@ -1,6 +1,6 @@
 'use client';
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const BASE = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '');
 const DEMO = process.env.NEXT_PUBLIC_DEMO === 'true';
 
 export function getToken(): string | null {
@@ -19,14 +19,19 @@ export function clearToken(): void {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
-      ...(init.headers ?? {}),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...init,
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+        ...(init.headers ?? {}),
+      },
+    });
+  } catch {
+    throw new Error('서버에 연결할 수 없습니다. 백엔드 서버 주소를 확인해 주세요.');
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(err.error ?? res.statusText);
