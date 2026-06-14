@@ -25,7 +25,10 @@ export default function DisplayPage({
   const [page, setPage] = useState(1);
   const [drawingsByPage, setDrawingsByPage] = useState<Record<number, DrawEvent[]>>({});
   const [laserPoint, setLaserPoint] = useState<{ x: number; y: number } | null>(null);
-  const [highlightedQ, setHighlightedQ] = useState<Question | null>(null);
+  const [highlightedQ, setHighlightedQ] = useState<{
+    content: string;
+    nickname?: string | null;
+  } | null>(null);
   const [connected, setConnected] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [audienceUrl, setAudienceUrl] = useState('');
@@ -88,12 +91,14 @@ export default function DisplayPage({
     });
 
     socket.on(SOCKET_EVENTS.QA_HIGHLIGHT, (payload) => {
-      if (!payload.isVisible) { setHighlightedQ(null); return; }
-      setSession((prev) => {
-        if (!prev) return prev;
-        const q = prev.questions.find((q) => q.id === payload.questionId) ?? null;
-        setHighlightedQ(q);
-        return prev;
+      // payload에 동봉된 내용으로 바로 렌더 (조회 불필요)
+      if (!payload.isVisible || !payload.content) {
+        setHighlightedQ(null);
+        return;
+      }
+      setHighlightedQ({
+        content: payload.content,
+        nickname: payload.nickname ?? null,
       });
     });
 
@@ -157,6 +162,23 @@ export default function DisplayPage({
     );
   }
 
+  // 청중 질문 강조: Q&A 풀페이지로 전환, 질문 1개 중앙 표시 (동시 하나)
+  if (highlightedQ) {
+    return (
+      <main className="flex h-screen w-screen flex-col items-center justify-center bg-dark-base px-12 text-center">
+        <span className="mb-8 rounded-full bg-electric-violet px-4 py-1.5 text-base font-semibold text-paper">
+          청중 질문
+        </span>
+        <p className="max-w-5xl text-5xl font-bold leading-snug text-paper">
+          {highlightedQ.content}
+        </p>
+        {highlightedQ.nickname && (
+          <span className="mt-10 text-2xl text-silver">— {highlightedQ.nickname}</span>
+        )}
+      </main>
+    );
+  }
+
   return (
     <main className="flex h-screen w-screen items-center justify-center bg-black">
       <div
@@ -180,15 +202,6 @@ export default function DisplayPage({
         )}
 
         <DrawingCanvas drawings={drawings} laserPoint={laserPoint} />
-
-        {highlightedQ && (
-          <div className="absolute inset-x-8 bottom-10 rounded-xl bg-dark-base/90 p-6 backdrop-blur-sm border border-dark-border">
-            <p className="mb-2 text-xs font-semibold text-electric-violet">
-              {highlightedQ.nickname ?? '익명'}의 질문
-            </p>
-            <p className="text-xl font-semibold text-paper">{highlightedQ.content}</p>
-          </div>
-        )}
       </div>
     </main>
   );

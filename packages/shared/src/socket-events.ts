@@ -48,6 +48,9 @@ export interface QuestionSubmitPayload {
 export interface QaHighlightPayload {
   questionId: string;
   isVisible: boolean;
+  /** 디스플레이가 조회 없이 바로 렌더하도록 내용·닉네임 동봉 (강조 시) */
+  content?: string;
+  nickname?: string | null;
 }
 
 /** §16.8 presentation_end: 발표 종료 */

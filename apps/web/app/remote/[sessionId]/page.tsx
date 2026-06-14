@@ -382,9 +382,12 @@ export default function RemotePage({
   function toggleHighlight(id: string) {
     const next = highlightedId === id ? null : id;
     setHighlightedId(next);
+    const q = questions.find((x) => x.id === id);
     socketRef.current?.emit(SOCKET_EVENTS.QA_HIGHLIGHT, {
       questionId: id,
       isVisible: next !== null,
+      content: q?.content,
+      nickname: q?.nickname,
     });
     if (next) timeline.push({ type: 'QA_SELECT', questionId: id });
     else timeline.push({ type: 'QA_HIDE' });
