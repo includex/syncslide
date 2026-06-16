@@ -8,7 +8,12 @@ import { use } from 'react';
 import { createSocket, type AppSocket } from '@/lib/socket';
 import { api, type Question } from '@/lib/api';
 import { DrawingCanvas } from '@/components/DrawingCanvas';
+import { slideColor } from '@/lib/demoSlides';
 import { SOCKET_EVENTS, type DrawEvent } from '@syncslide/shared';
+
+// 가로 모드 플로팅 버튼 토큰 (DESIGN.md §7)
+const FAB_VIOLET = '#7270ff';
+const FAB_PAPER = '#ffffff';
 
 export default function LivePage({
   params,
@@ -31,6 +36,24 @@ export default function LivePage({
   const [nickname, setNickname] = useState('');
   const [content, setContent] = useState('');
   const [submitted, setSubmitted] = useState(false);
+
+  // 화면 방향: 가로면 슬라이드 풀스크린, 세로면 슬라이드+질문 스택
+  const [isLandscape, setIsLandscape] = useState(false);
+  // 가로에서 💬 버튼 탭 시 세로(스택) 레이아웃 강제 표시
+  const [forcePortrait, setForcePortrait] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(orientation: landscape)');
+    const update = () => setIsLandscape(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
+  // 기기 방향이 실제로 바뀌면 강제 세로 해제 (가로 복귀 시 풀스크린으로, 갇힘 방지)
+  useEffect(() => {
+    setForcePortrait(false);
+  }, [isLandscape]);
 
   useEffect(() => {
     api.getSession(sessionId).then((s) => {
@@ -113,7 +136,80 @@ export default function LivePage({
 
   const slideUrl = images[page - 1];
   const drawings = drawingsByPage[page] ?? [];
+  // 가로 && 강제 세로 아님 → 풀스크린 슬라이드. 그 외(세로 또는 강제 세로) → 스택 레이아웃.
+  const fullscreenSlide = isLandscape && !forcePortrait;
 
+  // 슬라이드 박스 내부 (두 레이아웃 공통) — 부모는 position:relative 여야 함
+  const slideInner = (
+    <>
+      {status === 'READY' && (
+        <div className="flex h-full flex-col items-center justify-center gap-2">
+          <p className="text-base font-medium text-silver">{title || 'SyncSlide'}</p>
+          <p className="text-sm text-dark-border">발표 시작을 기다리는 중...</p>
+        </div>
+      )}
+      {status === 'FINISHED' && (
+        <div className="flex h-full items-center justify-center">
+          <p className="text-silver">발표가 종료되었습니다</p>
+        </div>
+      )}
+      {status === 'ACTIVE' &&
+        (slideUrl ? (
+          <img
+            src={slideUrl}
+            alt={`슬라이드 ${page}`}
+            className="absolute inset-0 h-full w-full object-contain"
+          />
+        ) : (
+          // 싱크: 디스플레이/리모콘과 동일한 slideColor 사용 (이전 hsl 불일치 버그 수정)
+          <div
+            className="absolute inset-0 flex items-center justify-center text-6xl font-bold text-paper"
+            style={{ backgroundColor: slideColor(page) }}
+          >
+            {page}
+          </div>
+        ))}
+
+      {status === 'ACTIVE' && <DrawingCanvas drawings={drawings} laserPoint={laserPoint} />}
+
+      {highlightedQ && (
+        <div className="absolute inset-x-4 bottom-4 rounded-lg bg-dark-base/90 p-4 backdrop-blur-sm border border-dark-border">
+          <p className="mb-1 text-xs font-semibold text-electric-violet">
+            {highlightedQ.nickname ?? '익명'}의 질문
+          </p>
+          <p className="text-sm font-medium text-paper">{highlightedQ.content}</p>
+        </div>
+      )}
+    </>
+  );
+
+  // ── 가로 모드: 슬라이드 풀스크린 + 💬 플로팅 버튼 ──
+  if (fullscreenSlide) {
+    return (
+      <div className="relative h-dvh w-screen overflow-hidden bg-black">
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div
+            className="relative"
+            style={{ width: 'min(100vw, 177.78vh)', height: 'min(100vh, 56.25vw)' }}
+          >
+            {slideInner}
+          </div>
+        </div>
+
+        {/* 💬 질문하기 → 세로(스택) 레이아웃 강제 전환 */}
+        <button
+          onClick={() => setForcePortrait(true)}
+          className="fixed bottom-6 right-6 z-30 flex h-16 w-16 items-center justify-center rounded-full text-2xl shadow-lg active:scale-95 transition-transform"
+          style={{ backgroundColor: FAB_VIOLET, color: FAB_PAPER }}
+          aria-label="질문하기"
+        >
+          💬
+        </button>
+      </div>
+    );
+  }
+
+  // ── 세로 모드(또는 가로에서 강제 세로): 슬라이드 미러링 + 질문 영역 ──
   return (
     <div className="flex min-h-screen flex-col bg-pebble">
       {/* 슬라이드 영역 — 다크 */}
@@ -122,40 +218,7 @@ export default function LivePage({
           className="relative w-full"
           style={{ aspectRatio: '16/9', maxHeight: '55vh' }}
         >
-          {status === 'READY' && (
-            <div className="flex h-full flex-col items-center justify-center gap-2">
-              <p className="text-base font-medium text-silver">{title || 'SyncSlide'}</p>
-              <p className="text-sm text-dark-border">발표 시작을 기다리는 중...</p>
-            </div>
-          )}
-          {status === 'FINISHED' && (
-            <div className="flex h-full items-center justify-center">
-              <p className="text-silver">발표가 종료되었습니다</p>
-            </div>
-          )}
-          {status === 'ACTIVE' && (
-            slideUrl ? (
-              <img src={slideUrl} alt={`슬라이드 ${page}`} className="absolute inset-0 h-full w-full object-contain" />
-            ) : (
-              <div
-                className="absolute inset-0 flex items-center justify-center text-6xl font-bold text-paper"
-                style={{ backgroundColor: `hsl(${page * 60}, 40%, 15%)` }}
-              >
-                {page}
-              </div>
-            )
-          )}
-
-          {status === 'ACTIVE' && <DrawingCanvas drawings={drawings} laserPoint={laserPoint} />}
-
-          {highlightedQ && (
-            <div className="absolute inset-x-4 bottom-4 rounded-lg bg-dark-base/90 p-4 backdrop-blur-sm border border-dark-border">
-              <p className="mb-1 text-xs font-semibold text-electric-violet">
-                {highlightedQ.nickname ?? '익명'}의 질문
-              </p>
-              <p className="text-sm font-medium text-paper">{highlightedQ.content}</p>
-            </div>
-          )}
+          {slideInner}
         </div>
       </div>
 
@@ -193,6 +256,18 @@ export default function LivePage({
           )}
         </form>
       </div>
+
+      {/* 가로 기기에서 강제 세로 상태일 때만: 풀스크린(슬라이드)으로 복귀 FAB */}
+      {isLandscape && forcePortrait && (
+        <button
+          onClick={() => setForcePortrait(false)}
+          className="fixed bottom-6 right-6 z-30 flex h-16 w-16 items-center justify-center rounded-full text-2xl shadow-lg active:scale-95 transition-transform"
+          style={{ backgroundColor: FAB_VIOLET, color: FAB_PAPER }}
+          aria-label="슬라이드 전체화면"
+        >
+          ⛶
+        </button>
+      )}
     </div>
   );
 }

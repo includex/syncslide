@@ -156,7 +156,11 @@ export default function RemotePage({
   const [questions, setQuestions] = useState<QaItem[]>(DEMO_QUESTIONS);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
 
+  // 실제 발표 슬라이드 미러링 — 세션의 presentation 이미지 (없으면 demoSlides 플레이스홀더)
+  const [images, setImages] = useState<string[]>([]);
+
   const page = currentPage > 0 ? currentPage : 1;
+  const slideUrl = images[page - 1];
   const modeRef = useRef<RemoteMode>(mode);
   modeRef.current = mode;
   const pageRef = useRef(page);
@@ -193,6 +197,19 @@ export default function RemotePage({
       socket.disconnect();
       reset();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
+  // 발표 슬라이드 이미지 로드 — 디스플레이와 동일한 이미지로 미러링. 총 페이지 수도 동기화.
+  useEffect(() => {
+    api
+      .getSession(sessionId)
+      .then((s) => {
+        const imgs = s.presentation?.images ?? [];
+        setImages(imgs);
+        if (imgs.length > 0) setTotalPages(imgs.length);
+      })
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
@@ -615,7 +632,8 @@ export default function RemotePage({
             ref={slideRef}
             className={slideBoxClass}
             style={{
-              backgroundColor: mode === 'script' ? C.base : slideColor(page),
+              backgroundColor:
+                mode === 'script' ? C.base : slideUrl ? '#000' : slideColor(page),
               transform: `translate(${transform.tx}px, ${transform.ty}px) scale(${transform.scale})`,
               transformOrigin: 'center center',
             }}
@@ -627,6 +645,14 @@ export default function RemotePage({
               >
                 {slideScript(page) || '스크립트 없음'}
               </p>
+            ) : slideUrl ? (
+              // 디스플레이와 동일한 실제 슬라이드 이미지 미러링
+              <img
+                src={slideUrl}
+                alt={`슬라이드 ${page}`}
+                className="absolute inset-0 h-full w-full object-contain"
+                draggable={false}
+              />
             ) : (
               <span className="text-7xl font-bold">{page}</span>
             )}
