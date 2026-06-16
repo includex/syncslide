@@ -2,6 +2,7 @@
  * Socket.io 서버 — 룸 join/leave + 실시간 이벤트 중계 (PRD §16)
  * 오너: Dev A.  question_submit DB 저장은 Dev B (WORKFLOW.md §4 Phase 2).
  */
+import { randomUUID } from 'node:crypto';
 import type { Server, Socket } from 'socket.io';
 import {
   SOCKET_EVENTS,
@@ -115,28 +116,35 @@ export function registerSocketHandlers(io: IOServer): void {
     });
 
     // Dev B: question_submit — DB 저장 후 발표자에게 전달 (PRD §16.6, §18.3)
+    // DB 미연결/오류여도 실시간 중계는 계속한다 (PRD §21). 저장 성공 시 DB id,
+    // 실패 시 임시 id로 폴백해 한 번만 emit한다.
     socket.on(SOCKET_EVENTS.QUESTION_SUBMIT, async (payload: QuestionSubmitPayload) => {
       if (isRateLimited(socket.id)) return;
-      if (!payload.content?.trim() || payload.content.length > 300) return;
+      const content = payload.content?.trim();
+      if (!content || content.length > 300) return;
+      const nickname = payload.nickname?.trim() || null;
 
+      let id: string;
+      let createdAt: string;
       try {
         const question = await prisma.question.create({
-          data: {
-            sessionId: payload.sessionId,
-            nickname: payload.nickname ?? null,
-            content: payload.content.trim(),
-          },
+          data: { sessionId: payload.sessionId, nickname, content },
         });
-        io.to(payload.sessionId).emit(SOCKET_EVENTS.QUESTION_ADDED, {
-          id: question.id,
-          sessionId: question.sessionId,
-          nickname: question.nickname,
-          content: question.content,
-          createdAt: question.createdAt.toISOString(),
-        });
+        id = question.id;
+        createdAt = question.createdAt.toISOString();
       } catch {
-        // 세션이 없거나 DB 오류 시 무시
+        // DB 미연결/오류 — 인메모리로 중계만 (영구 저장은 생략)
+        id = randomUUID();
+        createdAt = new Date().toISOString();
       }
+
+      io.to(payload.sessionId).emit(SOCKET_EVENTS.QUESTION_ADDED, {
+        id,
+        sessionId: payload.sessionId,
+        nickname,
+        content,
+        createdAt,
+      });
     });
 
     socket.on(SOCKET_EVENTS.PRESENTATION_END, (payload: PresentationEndPayload) => {
