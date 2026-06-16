@@ -88,7 +88,12 @@ export const api = {
   },
 
   createSession: async (_presentationId: string) => {
-    if (DEMO) return { id: 'demo', presentationId: 'demo', status: 'READY', createdAt: new Date().toISOString() } as Session;
+    if (DEMO) {
+      // 매번 고유 세션 id 발급 — 공유 'demo' 세션의 stale 상태(이전 ACTIVE)를
+      // 물려받아 디스플레이가 QR 대기화면 대신 슬라이드를 띄우던 버그 방지.
+      const id = `demo-${Date.now()}`;
+      return { id, presentationId: 'demo', status: 'READY', createdAt: new Date().toISOString() } as Session;
+    }
     return request<Session>(`/api/presentations/${_presentationId}/sessions`, { method: 'POST' });
   },
 

@@ -3,11 +3,14 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, setToken } from '@/lib/api';
 
+// 데모 모드: 예시 계정 미리 채워서 로그인 버튼만 눌러도 다음 화면으로 진입
+const DEMO = process.env.NEXT_PUBLIC_DEMO === 'true';
+
 export default function LoginPage() {
   const router = useRouter();
   const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState(DEMO ? 'demo@syncslide.app' : '');
+  const [password, setPassword] = useState(DEMO ? 'demo1234' : '');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
