@@ -31,12 +31,34 @@ router.get('/:id', requireAuth, async (req, res) => {
     include: {
       sessions: {
         orderBy: { createdAt: 'desc' },
-        include: { recording: { select: { id: true } } },
+        include: {
+          recording: { select: { id: true, audioUrl: true } },
+          questions: { orderBy: { createdAt: 'asc' as const } },
+        },
       },
     },
   });
   if (!p) { res.status(404).json({ error: 'Not found' }); return; }
   res.json(p);
+});
+
+// PATCH /api/presentations/:id/scripts — 페이지별 스크립트 저장
+router.patch('/:id/scripts', requireAuth, async (req, res) => {
+  const userId = (req as AuthRequest).userId!;
+  const body = req.body as { scripts?: string[] };
+  if (!Array.isArray(body.scripts)) {
+    res.status(400).json({ error: 'scripts 배열이 필요합니다' });
+    return;
+  }
+  const p = await prisma.presentation.findFirst({
+    where: { id: req.params.id, ownerId: userId },
+  });
+  if (!p) { res.status(404).json({ error: 'Not found' }); return; }
+  const updated = await prisma.presentation.update({
+    where: { id: req.params.id },
+    data: { scripts: body.scripts },
+  });
+  res.json({ ok: true, scripts: updated.scripts });
 });
 
 router.post('/', requireAuth, upload.single('pdf'), async (req, res) => {

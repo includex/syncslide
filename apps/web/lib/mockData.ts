@@ -14,6 +14,7 @@ export const MOCK_PRESENTATION: PresentationDetail = {
   title: 'SyncSlide 데모 발표',
   pdfUrl: '',
   images: MOCK_IMAGES,
+  scripts: [],
   status: 'READY',
   createdAt: new Date(Date.now() - 3600000).toISOString(),
   sessions: [
@@ -22,7 +23,8 @@ export const MOCK_PRESENTATION: PresentationDetail = {
       presentationId: 'demo',
       status: 'FINISHED',
       createdAt: new Date(Date.now() - 3600000).toISOString(),
-      recording: { id: 'demo-recording' },
+      recording: { id: 'demo-recording', audioUrl: null },
+      questions: [],
     },
   ],
 };
@@ -35,6 +37,7 @@ export const MOCK_SESSION: SessionDetail = {
   presentation: {
     title: 'SyncSlide 데모 발표',
     images: MOCK_IMAGES,
+    scripts: [],
   },
   questions: [
     { id: 'q1', sessionId: 'demo', nickname: '김철수', content: '슬라이드 몇 장까지 지원하나요?', createdAt: new Date().toISOString() },

@@ -1,6 +1,7 @@
 'use client';
 
 const BASE = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '');
+const UPLOAD_BASE = (process.env.NEXT_PUBLIC_SOCKET_URL ?? process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '');
 const DEMO = process.env.NEXT_PUBLIC_DEMO === 'true';
 
 export function getToken(): string | null {
@@ -110,7 +111,25 @@ export const api = {
       const { MOCK_RECORDING } = await demoApi();
       return MOCK_RECORDING as Recording;
     }
-    return request<Recording>(`/api/sessions/${sessionId}/recording`, { method: 'POST', body: formData });
+    const token = getToken();
+    const res = await fetch(`${UPLOAD_BASE}/api/sessions/${sessionId}/recording`, {
+      method: 'POST',
+      body: formData,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { error?: string };
+      throw new Error(err.error ?? res.statusText);
+    }
+    return res.json() as Promise<Recording>;
+  },
+
+  saveScripts: async (presentationId: string, scripts: string[]) => {
+    if (DEMO) return;
+    await request(`/api/presentations/${presentationId}/scripts`, {
+      method: 'PATCH',
+      body: JSON.stringify({ scripts }),
+    });
   },
 
   getRecording: async (id: string) => {
@@ -134,12 +153,16 @@ export interface Presentation {
   title: string;
   pdfUrl: string;
   images: string[];
+  scripts: string[];
   status: 'PROCESSING' | 'READY' | 'FAILED';
   createdAt: string;
 }
 
 export interface PresentationDetail extends Presentation {
-  sessions: (Session & { recording: { id: string } | null })[];
+  sessions: (Session & {
+    recording: { id: string; audioUrl: string | null } | null;
+    questions: Question[];
+  })[];
 }
 
 export interface Session {
@@ -150,7 +173,7 @@ export interface Session {
 }
 
 export interface SessionDetail extends Session {
-  presentation: { title: string; images: string[] };
+  presentation: { title: string; images: string[]; scripts: string[] };
   questions: Question[];
 }
 

@@ -23,7 +23,7 @@ router.get('/sessions/:id', async (req, res) => {
   const session = await prisma.session.findUnique({
     where: { id: req.params.id },
     include: {
-      presentation: { select: { title: true, images: true } },
+      presentation: { select: { title: true, images: true, scripts: true } },
       questions: { orderBy: { createdAt: 'asc' } },
     },
   });

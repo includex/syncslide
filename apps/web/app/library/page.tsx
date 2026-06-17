@@ -39,8 +39,12 @@ export default function LibraryPage() {
   async function loadList() {
     try {
       setPresentations(await api.getPresentations());
-    } catch {
-      router.push('/login');
+    } catch (err) {
+      // 인증 오류일 때만 로그인으로 이동 (네트워크 오류 등은 무시)
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('401') || msg.toLowerCase().includes('unauthorized') || msg.includes('토큰')) {
+        router.push('/login');
+      }
     }
   }
 
@@ -67,7 +71,10 @@ export default function LibraryPage() {
     <div className="min-h-screen bg-pebble">
       {/* 네비게이션 바 */}
       <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-mist bg-paper px-10">
-        <span className="text-base font-semibold text-midnight-ink">내 발표 자료</span>
+        <div className="flex items-center gap-4">
+          <Link href="/" className="text-sm font-medium text-slate-text hover:text-deep-indigo">← 홈</Link>
+          <span className="text-base font-semibold text-midnight-ink">내 발표 자료</span>
+        </div>
         <div className="flex items-center gap-4">
           <button
             onClick={() => fileRef.current?.click()}

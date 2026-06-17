@@ -15,8 +15,6 @@ import { SOCKET_EVENTS } from '@syncslide/shared';
 import {
   TOTAL_PAGES,
   slideColor,
-  slideScript,
-  DEMO_QUESTIONS,
 } from '@/lib/demoSlides';
 import { useRemoteStore, type RemoteMode } from '@/lib/remoteStore';
 import { useWakeLock } from '@/lib/useWakeLock';
@@ -153,11 +151,12 @@ export default function RemotePage({
   const [endConfirm, setEndConfirm] = useState(false);
 
   // Q&A — 질문 목록(오래된 순, 새 질문은 하단 추가) + 강조 중 질문(한 번에 하나)
-  const [questions, setQuestions] = useState<QaItem[]>(DEMO_QUESTIONS);
+  const [questions, setQuestions] = useState<QaItem[]>([]);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
 
   // 실제 발표 슬라이드 미러링 — 세션의 presentation 이미지 (없으면 demoSlides 플레이스홀더)
   const [images, setImages] = useState<string[]>([]);
+  const [scripts, setScripts] = useState<string[]>([]);
 
   const page = currentPage > 0 ? currentPage : 1;
   const slideUrl = images[page - 1];
@@ -208,6 +207,17 @@ export default function RemotePage({
         const imgs = s.presentation?.images ?? [];
         setImages(imgs);
         if (imgs.length > 0) setTotalPages(imgs.length);
+        if (s.questions) setQuestions(s.questions.map((q) => ({ id: q.id, nickname: q.nickname ?? null, content: q.content })));
+        // 서버 scripts 우선, 없으면 localStorage fallback
+        const serverScripts = s.presentation?.scripts ?? [];
+        if (serverScripts.length > 0) {
+          setScripts(serverScripts);
+        } else {
+          try {
+            const raw = localStorage.getItem(`scripts-${s.presentationId}`);
+            if (raw) setScripts(JSON.parse(raw) as string[]);
+          } catch { /* ignore */ }
+        }
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -643,7 +653,7 @@ export default function RemotePage({
                 className="max-w-3xl px-8 text-center leading-relaxed"
                 style={{ fontSize: 26, fontWeight: 500, color: C.textPrimary }}
               >
-                {slideScript(page) || '스크립트 없음'}
+                {scripts[page - 1] || '스크립트 없음'}
               </p>
             ) : slideUrl ? (
               // 디스플레이와 동일한 실제 슬라이드 이미지 미러링

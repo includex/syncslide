@@ -3,7 +3,6 @@ import multer from 'multer';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { supabase } from '../lib/supabase.js';
-import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
 const upload = multer({
@@ -12,14 +11,12 @@ const upload = multer({
 });
 
 // POST /api/sessions/:id/recording — 오디오 + 타임라인 저장
-router.post('/sessions/:id/recording', requireAuth, upload.single('audio'), async (req, res) => {
-  const userId = (req as AuthRequest).userId!;
+router.post('/sessions/:id/recording', upload.single('audio'), async (req, res) => {
   const session = await prisma.session.findUnique({
     where: { id: req.params.id },
-    include: { presentation: { select: { ownerId: true } } },
   });
-  if (!session || session.presentation.ownerId !== userId) {
-    res.status(403).json({ error: 'Forbidden' });
+  if (!session) {
+    res.status(404).json({ error: 'Session not found' });
     return;
   }
 
